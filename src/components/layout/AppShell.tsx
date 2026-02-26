@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthDropdown } from './AuthDropdown'
+import { signOut } from '../../api/authApi'
 import { AppRoutes } from './AppRoutes'
 import type { Role, UserInfo } from '../../types/auth'
 
@@ -11,7 +12,8 @@ export function AppShell() {
   const [user, setUser] = useState<UserInfo | null>(null)
   const navigate = useNavigate()
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await signOut()
     setUser(null)
     setView('home')
     navigate('/')

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { UserInfo } from '../types/auth'
+import { signIn, signUp } from '../api/authApi'
 
 interface AuthPageProps {
   onAuthenticated(user: UserInfo): void
@@ -22,16 +23,17 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
 
     try {
       if (tab === 'signin') {
-        onAuthenticated({ email, currentRole: 'User' })
-        setMessage('Signed in (mock). Wire this to real API.')
+        const { user } = await signIn({ email, password })
+        onAuthenticated(user)
       } else if (tab === 'signup') {
-        onAuthenticated({ email, currentRole: 'User' })
-        setMessage('Account created (mock). Wire this to real API.')
+        const { user } = await signUp({ email, password, name })
+        onAuthenticated(user)
       } else {
         setMessage('Password reset link will be sent (skeleton).')
       }
-    } catch {
-      setMessage('Something went wrong. Please try again.')
+    } catch (error) {
+      const err = error as Error
+      setMessage(err.message || 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -127,8 +129,6 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         )}
 
         {message && <p className="auth-message">{message}</p>}
-
-       
       </div>
     </div>
   )
