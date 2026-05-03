@@ -1,10 +1,87 @@
 @import "tailwindcss";
 
-body {
-  min-height: 100vh;
-  margin: 0;
-  background-color: #020617; 
-  color: #f9fafb;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --color-surface: #0f172a;
+  --color-surface-alt: #1e293b;
+  --color-border: rgba(148, 163, 184, 0.12);
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+}
+
+@layer base {
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background-color: #020617;
+    color: #f1f5f9;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input, select, textarea {
+    @apply w-full rounded-xl border border-slate-700/50 bg-slate-900/60 px-4 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/30;
+  }
+
+  label {
+    @apply block text-xs font-medium text-slate-400 mb-1;
+  }
+
+  h1 { @apply text-2xl font-bold tracking-tight; }
+  h2 { @apply text-xl font-bold tracking-tight; }
+  h3 { @apply text-base font-semibold; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.18); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.3); }
+
+/* Glass card utility */
+@utility glass {
+  background: linear-gradient(135deg, rgba(15,23,42,0.85), rgba(30,41,59,0.65));
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+@utility glass-sm {
+  background: rgba(15,23,42,0.7);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(8px);
+}
+
+/* Spinner */
+@utility spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(148,163,184,0.15);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@utility fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Skeleton */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@utility skeleton {
+  background: linear-gradient(90deg, rgba(148,163,184,0.06) 25%, rgba(148,163,184,0.12) 50%, rgba(148,163,184,0.06) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 0.5rem;
 }

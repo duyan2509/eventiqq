@@ -1,70 +1,75 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { AuthDropdown } from './AuthDropdown'
-import { signOut } from '../../api/authApi'
+import { signOut, tryRefreshSession } from '../../api/authApi'
 import { AppRoutes } from './AppRoutes'
 import type { Role, UserInfo } from '../../types/auth'
 
-type View = 'home' | 'auth' | 'switch-role' | 'admin'
+type NavItem = { label: string; path: string; requiresAuth?: boolean; roles?: Role[] }
+
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Home', path: '/' },
+  { label: 'Events', path: '/events' },
+  { label: 'Organizations', path: '/organizations', requiresAuth: true },
+  { label: 'Invitations', path: '/invitations', requiresAuth: true },
+]
 
 export function AppShell() {
-  const [view, setView] = useState<View>('home')
   const [user, setUser] = useState<UserInfo | null>(null)
+  const [restoring, setRestoring] = useState(true)
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const handleSignOut = async () => {
-    await signOut()
-    setUser(null)
-    setView('home')
-    navigate('/')
-  }
+  useEffect(() => {
+    // Try to restore session using HttpOnly cookie (no localStorage)
+    tryRefreshSession()
+      .then(u => setUser(u))
+      .finally(() => setRestoring(false))
+  }, [])
 
-  const handleRoleChange = (nextRole: Role) => {
-    if (!user) return
-    setUser({ ...user, currentRole: nextRole })
+  const handleSignOut = async () => { await signOut(); setUser(null); navigate('/') }
+  const handleRoleChange = (_role: Role, updatedUser: UserInfo) => { setUser(updatedUser) }
+  const currentPath = location.pathname
+  const isOrgWorkspace = /^\/organizations\/[^/]+/.test(currentPath)
+
+  if (restoring) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="spinner" />
+          <p className="text-sm text-slate-400">Loading...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="mx-auto my-6 max-w-5xl rounded-3xl border border-slate-600/60 bg-slate-900/95 px-6 pb-10 pt-5 shadow-[0_24px_80px_rgba(15,23,42,0.8)]">
-      <header className="mb-4 flex items-center gap-6 border-b border-slate-600/70 pb-4">
-        <button
-          type="button"
-          onClick={() => {
-            setView('home')
-            navigate('/')
-          }}
-          className="flex items-center gap-2 text-left"
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-emerald-400 text-base font-semibold text-slate-50">
-            E
-          </span>
-          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
-            Eventiqq
-          </span>
+    <div className="min-h-screen">
+      <header className="sticky top-0 z-50 flex items-center justify-between gap-4 border-b border-slate-800/60 bg-slate-950/80 px-6 py-3 backdrop-blur-xl">
+        <button type="button" onClick={() => navigate('/')} className="flex items-center gap-2.5 outline-none">
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-500 text-sm font-bold text-white">E</span>
+          <span className="text-sm font-bold tracking-wider text-slate-200 uppercase">Eventiqq</span>
         </button>
 
-        <nav className="flex flex-1 gap-2">
-          <button
-            className={`rounded-full px-3 py-2 text-sm transition ${
-              view === 'home'
-                ? 'bg-indigo-600/80 text-slate-50 shadow-[0_8px_24px_rgba(37,99,235,0.6)]'
-                : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
-            }`}
-            onClick={() => setView('home')}
-          >
-            Home
-          </button>
+        <nav className="flex items-center gap-1">
+          {NAV_ITEMS.map((item) => {
+            if (item.requiresAuth && !user) return null
+            if (item.roles && (!user || !item.roles.includes(user.currentRole))) return null
+            const isActive = currentPath === item.path
+            return (
+              <button
+                key={item.path}
+                className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${isActive ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}
+                onClick={() => navigate(item.path)}
+              >
+                {item.label}
+              </button>
+            )
+          })}
           {user?.currentRole === 'Admin' && (
             <button
-              className={`rounded-full px-3 py-2 text-sm transition ${
-                view === 'admin'
-                  ? 'bg-indigo-600/80 text-slate-50 shadow-[0_8px_24px_rgba(37,99,235,0.6)]'
-                  : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-100'
-              }`}
-              onClick={() => {
-                setView('admin')
-                navigate('/admin')
-              }}
+              className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${currentPath === '/admin' ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}
+              onClick={() => navigate('/admin')}
             >
               Admin
             </button>
@@ -74,55 +79,40 @@ export function AppShell() {
         <div className="flex items-center gap-2">
           {!user && (
             <>
-              <button
-                className="rounded-full border border-slate-500/70 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 hover:bg-slate-900"
-                onClick={() => {
-                  setView('auth')
-                  navigate('/auth')
-                }}
-              >
-                Sign in
+              <button className="rounded-full border border-slate-700 px-4 py-1.5 text-[13px] font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-white" onClick={() => navigate('/auth')}>
+                Sign In
               </button>
-              <button
-                className="rounded-full bg-indigo-600 px-3 py-2 text-sm font-medium text-slate-50 shadow-[0_10px_24px_rgba(37,99,235,0.7)] hover:bg-indigo-500"
-                onClick={() => {
-                  setView('auth')
-                  navigate('/auth')
-                }}
-              >
-                Sign up
+              <button className="rounded-full bg-indigo-500 px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-indigo-400" onClick={() => navigate('/auth')}>
+                Sign Up
               </button>
             </>
           )}
-
           {user && (
             <AuthDropdown
               user={user}
-              onOpenProfile={() => {
-                setView('auth')
-                navigate('/auth')
-              }}
-              onOpenSwitchRole={() => {
-                setView('switch-role')
-                navigate('/switch-role')
-              }}
+              onOpenProfile={() => navigate('/auth')}
+              onOpenSwitchRole={() => navigate('/switch-role')}
               onSignOut={handleSignOut}
             />
           )}
         </div>
       </header>
 
-      <main className="pt-5">
+      {isOrgWorkspace ? (
         <AppRoutes
           user={user}
-          onAuthenticated={(nextUser) => {
-            setUser(nextUser)
-            setView('home')
-          }}
+          onAuthenticated={(nextUser) => { setUser(nextUser); navigate('/') }}
           onRoleChanged={handleRoleChange}
         />
-      </main>
+      ) : (
+        <main className="mx-auto max-w-7xl px-6 py-8">
+          <AppRoutes
+            user={user}
+            onAuthenticated={(nextUser) => { setUser(nextUser); navigate('/') }}
+            onRoleChanged={handleRoleChange}
+          />
+        </main>
+      )}
     </div>
   )
 }
-

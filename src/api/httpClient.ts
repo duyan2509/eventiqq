@@ -1,13 +1,14 @@
 import axios from 'axios'
-import { clearTokens, getAccessToken, getRefreshToken, setAccessToken, setTokens } from '../store/authStore'
+import { clearAccessToken, getAccessToken, setAccessToken } from '../store/authStore'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL 
 
 export const http = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true
+  withCredentials: true,       // always send cookies (refresh token)
 })
 
+// Attach access token to every request
 http.interceptors.request.use((config) => {
   const token = getAccessToken()
   if (token) {
@@ -28,35 +29,23 @@ async function refreshTokenIfNeeded() {
   }
 
   isRefreshing = true
-  const storedRefresh = getRefreshToken()
-  if (!storedRefresh) {
-    isRefreshing = false
-    clearTokens()
-    window.location.href = '/login'
-    pendingRequests.forEach((fn) => fn(null))
-    pendingRequests = []
-    return null
-  }
 
   try {
-    const res = await axios.post<{ accessToken: string; refreshToken?: string }>(
+    // POST to refresh — no body needed, refresh token is in HttpOnly cookie
+    const res = await axios.post<{ accessToken: string }>(
       `${API_BASE_URL}/auth/refresh`,
-      { refreshToken: storedRefresh },
+      {},
       { withCredentials: true },
     )
 
-    const { accessToken, refreshToken } = res.data
-    if (refreshToken) {
-      setTokens({ accessToken, refreshToken })
-    } else {
-      setAccessToken(accessToken)
-    }
+    const { accessToken } = res.data
+    setAccessToken(accessToken)
 
     pendingRequests.forEach((fn) => fn(accessToken))
     pendingRequests = []
     return accessToken
   } catch {
-    clearTokens()
+    clearAccessToken()
     pendingRequests.forEach((fn) => fn(null))
     pendingRequests = []
     return null
@@ -84,4 +73,3 @@ http.interceptors.response.use(
     return http(originalRequest)
   },
 )
-
