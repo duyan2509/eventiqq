@@ -10,6 +10,8 @@ import { getSessions, createSession, deleteSession } from '../../api/sessionApi'
 import { getLegends, createLegend, deleteLegend } from '../../api/legendApi'
 import { getCharts, createChart, deleteChart } from '../../api/chartApi'
 import { getSubmissions, submitEvent, acceptSubmission, rejectSubmission } from '../../api/submissionApi'
+import { getProvinces, getCommunes } from '../../api/addressApi'
+import type { Province, Commune } from '../../api/addressApi'
 
 type DetailTab = 'info' | 'sessions' | 'legends' | 'charts' | 'submissions' | 'seatmaps'
 
@@ -27,6 +29,11 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
   const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [bannerPreview, setBannerPreview] = useState<string | null>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
+
+  const [provinces, setProvinces] = useState<Province[]>([])
+  const [communes, setCommunes] = useState<Commune[]>([])
+  const [loadingProvinces, setLoadingProvinces] = useState(false)
+  const [loadingCommunes, setLoadingCommunes] = useState(false)
 
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -63,6 +70,21 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
   }
 
   useEffect(() => { fetchEvents(page) }, [page, orgId])
+
+  const handleOpenCreate = async () => {
+    setShowCreate(true)
+    if (provinces.length > 0) return
+    setLoadingProvinces(true)
+    try { setProvinces(await getProvinces()) } catch { } finally { setLoadingProvinces(false) }
+  }
+
+  const handleProvinceChange = async (code: string, name: string) => {
+    setCreateForm(f => ({ ...f, provinceCode: code, provinceName: name, communeCode: '', communeName: '' }))
+    setCommunes([])
+    if (!code) return
+    setLoadingCommunes(true)
+    try { setCommunes(await getCommunes(code)) } catch { } finally { setLoadingCommunes(false) }
+  }
 
   const handleBannerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
@@ -467,8 +489,34 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
               <div><label>Address</label><input value={createForm.detailAddress} onChange={e => setCreateForm({ ...createForm, detailAddress: e.target.value })} placeholder="123 Main Street" /></div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div><label>Province</label><input value={createForm.provinceName} onChange={e => setCreateForm({ ...createForm, provinceName: e.target.value })} placeholder="Hồ Chí Minh" /></div>
-                <div><label>Commune</label><input value={createForm.communeName} onChange={e => setCreateForm({ ...createForm, communeName: e.target.value })} placeholder="Quận 1" /></div>
+                <div>
+                  <label>Province</label>
+                  <select
+                    value={createForm.provinceCode}
+                    onChange={e => {
+                      const p = provinces.find(x => x.code === e.target.value)
+                      handleProvinceChange(e.target.value, p?.name ?? '')
+                    }}
+                    disabled={loadingProvinces}
+                  >
+                    <option value="">{loadingProvinces ? 'Loading…' : 'Select province'}</option>
+                    {provinces.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Commune</label>
+                  <select
+                    value={createForm.communeCode}
+                    onChange={e => {
+                      const c = communes.find(x => x.code === e.target.value)
+                      setCreateForm(f => ({ ...f, communeCode: e.target.value, communeName: c?.name ?? '' }))
+                    }}
+                    disabled={!createForm.provinceCode || loadingCommunes}
+                  >
+                    <option value="">{loadingCommunes ? 'Loading…' : createForm.provinceCode ? 'Select commune' : 'Select province first'}</option>
+                    {communes.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                  </select>
+                </div>
               </div>
 
               {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">{error}</div>}
@@ -490,7 +538,7 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
         </div>
         <button
           className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition-colors"
-          onClick={() => { setShowCreate(true) }}
+          onClick={handleOpenCreate}
         >+ Create Event</button>
       </div>
 
