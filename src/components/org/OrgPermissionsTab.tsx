@@ -8,7 +8,7 @@ interface Props {
   onError: (msg: string) => void
 }
 
-export function OrgPermissionsTab({ orgId, onError }: Props) {
+export function OrgPermissionsTab({ orgId, onError: _onError }: Props) {
   const [permissions, setPermissions] = useState<PermissionResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)

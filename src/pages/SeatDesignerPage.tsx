@@ -5,6 +5,8 @@ import type { SeatMapResponse } from '../types/seat'
 import { getVersions, saveVersion, restoreVersion } from '../api/seatVersionApi'
 import type { SeatMapVersionResponse } from '../api/seatVersionApi'
 import * as hub from '../api/seatDesignHub'
+import { getCharts } from '../api/chartApi'
+import type { ChartResponse } from '../types/index'
 
 /* ===== Types ===== */
 interface Geometry { x: number; y: number; width: number; height: number; rotation?: number }
@@ -31,6 +33,8 @@ export function SeatDesignerPage() {
   const [showCreateMap, setShowCreateMap] = useState(false)
   const [newMapName, setNewMapName] = useState('')
   const [newMapChartId, setNewMapChartId] = useState('')
+  const [charts, setCharts] = useState<ChartResponse[]>([])
+  const [loadingCharts, setLoadingCharts] = useState(false)
   const seatMapId = paramSeatMapId || ''
 
   useEffect(() => {
@@ -38,6 +42,15 @@ export function SeatDesignerPage() {
     setLoadingMaps(true)
     getSeatMapsByEvent(eventId).then(r => setSeatMaps(Array.isArray(r) ? r : [])).catch(() => {}).finally(() => setLoadingMaps(false))
   }, [eventId, seatMapId])
+
+  const handleOpenCreateMap = async () => {
+    setShowCreateMap(true)
+    if (!eventId) return
+    setLoadingCharts(true)
+    try { const r = await getCharts(eventId); setCharts(r.data); if (r.data.length > 0) setNewMapChartId(r.data[0].id) }
+    catch { }
+    finally { setLoadingCharts(false) }
+  }
 
   const handleCreateSeatMap = async () => {
     if (!eventId || !newMapName || !newMapChartId) return
@@ -54,7 +67,7 @@ export function SeatDesignerPage() {
             <p className="text-sm text-slate-400">Select or create a seat map for this event.</p>
             <Link to="/events" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← Back to events</Link>
           </div>
-          <button className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={() => setShowCreateMap(true)}>+ Create Seat Map</button>
+          <button className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={handleOpenCreateMap}>+ Create Seat Map</button>
         </div>
 
         {showCreateMap && (
@@ -63,7 +76,18 @@ export function SeatDesignerPage() {
               <h2 className="mb-4">Create Seat Map</h2>
               <div className="space-y-4">
                 <div><label>Name</label><input value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="e.g. Main Hall" /></div>
-                <div><label>Chart ID</label><input value={newMapChartId} onChange={e => setNewMapChartId(e.target.value)} placeholder="GUID" /></div>
+                <div>
+                  <label>Chart</label>
+                  {loadingCharts ? (
+                    <p className="text-xs text-slate-400">Loading charts…</p>
+                  ) : charts.length === 0 ? (
+                    <p className="text-xs text-red-400">No charts found. Create a chart for this event first.</p>
+                  ) : (
+                    <select value={newMapChartId} onChange={e => setNewMapChartId(e.target.value)}>
+                      {charts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  )}
+                </div>
                 <div className="flex justify-end gap-2">
                   <button className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300" onClick={() => setShowCreateMap(false)}>Cancel</button>
                   <button className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={handleCreateSeatMap}>Create</button>
@@ -247,12 +271,39 @@ export function SeatDesignerPage() {
   const handleMouseUp = () => setIsPanning(false)
 
   /* Actions */
-  const handleAddSection = async () => { if (!seatMapId || !newSectionLabel) return; await hub.addSection(seatMapId, { label: newSectionLabel, sectionType: SECTION_TYPES.indexOf(newSectionType as any), geometry: JSON.stringify({ x: newSectionX, y: newSectionY, width: newSectionW, height: newSectionH }), style: JSON.stringify({ fill: 'rgba(99,102,241,0.08)', stroke: 'rgba(99,102,241,0.3)' }), sortOrder: sections.length }); setShowAddSection(false); setNewSectionLabel('') }
-  const handleAddObject = async () => { if (!seatMapId) return; await hub.addObject(seatMapId, { objectType: OBJECT_TYPES.indexOf(newObjType as any), label: newObjLabel || newObjType, geometry: JSON.stringify({ x: 200, y: 50, width: 300, height: 80 }), style: JSON.stringify({ fill: 'rgba(99,102,241,0.25)', stroke: '#818cf8' }), zIndex: objects.length }); setShowAddObject(false); setNewObjLabel('') }
-  const handleAddRow = async () => { if (!seatMapId || !selectedSection || !newRowLabel) return; await hub.addRow(seatMapId, { sectionId: selectedSection, label: newRowLabel, rowNumber: (sections.find(s => s.id === selectedSection)?.rows.length || 0) + 1, seatSpacing: newRowSpacing, seatCount: newRowSeatCount, labelPrefix: newRowLabel }); setShowAddRow(false); setNewRowLabel('') }
-  const handleDeleteSection = async (id: string) => { if (!seatMapId || !confirm('Delete this section?')) return; await hub.deleteSection(seatMapId, id); if (selectedSection === id) setSelectedSection(null) }
-  const handleDeleteObject = async (id: string) => { if (!seatMapId || !confirm('Delete this object?')) return; await hub.deleteObject(seatMapId, id) }
-  const handleDeleteRow = async (id: string) => { if (!seatMapId || !confirm('Delete this row?')) return; await hub.deleteRow(seatMapId, id) }
+  const [hubError, setHubError] = useState<string | null>(null)
+  const showHubError = (action: string) => setHubError(`Failed to ${action}. Please try again.`)
+
+  const handleAddSection = async () => {
+    if (!seatMapId || !newSectionLabel) return
+    try { await hub.addSection(seatMapId, { label: newSectionLabel, sectionType: SECTION_TYPES.indexOf(newSectionType as any), geometry: JSON.stringify({ x: newSectionX, y: newSectionY, width: newSectionW, height: newSectionH }), style: JSON.stringify({ fill: 'rgba(99,102,241,0.08)', stroke: 'rgba(99,102,241,0.3)' }), sortOrder: sections.length }); setShowAddSection(false); setNewSectionLabel('') }
+    catch { showHubError('add section') }
+  }
+  const handleAddObject = async () => {
+    if (!seatMapId) return
+    try { await hub.addObject(seatMapId, { objectType: OBJECT_TYPES.indexOf(newObjType as any), label: newObjLabel || newObjType, geometry: JSON.stringify({ x: 200, y: 50, width: 300, height: 80 }), style: JSON.stringify({ fill: 'rgba(99,102,241,0.25)', stroke: '#818cf8' }), zIndex: objects.length }); setShowAddObject(false); setNewObjLabel('') }
+    catch { showHubError('add object') }
+  }
+  const handleAddRow = async () => {
+    if (!seatMapId || !selectedSection || !newRowLabel) return
+    try { await hub.addRow(seatMapId, { sectionId: selectedSection, label: newRowLabel, rowNumber: (sections.find(s => s.id === selectedSection)?.rows.length || 0) + 1, seatSpacing: newRowSpacing, seatCount: newRowSeatCount, labelPrefix: newRowLabel }); setShowAddRow(false); setNewRowLabel('') }
+    catch { showHubError('add row') }
+  }
+  const handleDeleteSection = async (id: string) => {
+    if (!seatMapId || !confirm('Delete this section?')) return
+    try { await hub.deleteSection(seatMapId, id); if (selectedSection === id) setSelectedSection(null) }
+    catch { showHubError('delete section') }
+  }
+  const handleDeleteObject = async (id: string) => {
+    if (!seatMapId || !confirm('Delete this object?')) return
+    try { await hub.deleteObject(seatMapId, id) }
+    catch { showHubError('delete object') }
+  }
+  const handleDeleteRow = async (id: string) => {
+    if (!seatMapId || !confirm('Delete this row?')) return
+    try { await hub.deleteRow(seatMapId, id) }
+    catch { showHubError('delete row') }
+  }
   const handleSaveVersion = async () => { if (!seatMapId) return; try { await saveVersion(seatMapId, 'Manual save'); alert('Version saved!') } catch { alert('Save failed.') } }
   const handleLoadVersions = async () => { if (!seatMapId) return; setVersions(await getVersions(seatMapId)); setShowVersions(true) }
   const handleRestoreVersion = async (vid: string) => { if (!seatMapId || !confirm('Restore this version?')) return; try { const v = await restoreVersion(seatMapId, vid); const snap = JSON.parse(v.snapshot); if (snap.sections) setSections(snap.sections); if (snap.objects) setObjects(snap.objects); setShowVersions(false) } catch { alert('Restore failed.') } }
@@ -287,6 +338,13 @@ export function SeatDesignerPage() {
           <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleLoadVersions}>📋 Versions</button>
         </div>
       </div>
+
+      {hubError && (
+        <div className="flex items-center justify-between bg-red-500/15 border-b border-red-500/20 px-4 py-2 text-xs text-red-400">
+          <span>{hubError}</span>
+          <button className="ml-4 text-red-300 hover:text-white" onClick={() => setHubError(null)}>✕</button>
+        </div>
+      )}
 
       <div className="grid flex-1 overflow-hidden" style={{ gridTemplateColumns: '180px 1fr 200px' }}>
         {/* Left Panel */}

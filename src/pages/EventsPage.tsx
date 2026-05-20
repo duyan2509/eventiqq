@@ -85,7 +85,7 @@ export function EventsPage() {
   const formatDate = (d: string) => { try { return new Date(d).toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' }) } catch { return d } }
   const statusColor = (s: string) => s === 'Published' ? 'bg-emerald-500/15 text-emerald-400' : s === 'Cancelled' ? 'bg-red-500/15 text-red-400' : s === 'Approved' ? 'bg-blue-500/15 text-blue-400' : s === 'Pending' ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-700/40 text-slate-400'
   const totalPages = Math.ceil(total / 12)
-  const detailTabs: { key: DetailTab; label: string }[] = [{ key: 'info', label: 'Info' }, { key: 'sessions', label: 'Sessions' }, { key: 'legends', label: 'Tickets' }, { key: 'seatmaps', label: 'Seat Maps' }]
+  const detailTabs: { key: DetailTab; label: string }[] = [{ key: 'info', label: 'Info' }, { key: 'sessions', label: 'Sessions' }, { key: 'legends', label: 'Pricing Tiers' }, { key: 'seatmaps', label: 'Seat Maps' }]
 
   return (
     <div className="fade-in space-y-6">
@@ -143,7 +143,7 @@ export function EventsPage() {
 
                 {/* ── Legends Tab ── */}
                 {detailTab === 'legends' && (<>
-                  {legends.length === 0 ? <p className="text-sm text-slate-400">No tickets available.</p> : (
+                  {legends.length === 0 ? <p className="text-sm text-slate-400">No pricing tiers available.</p> : (
                     <div className="space-y-2">{legends.map(l => (
                       <div key={l.id} className="flex items-center justify-between rounded-xl border border-slate-700/30 bg-slate-900/40 px-4 py-3 text-sm">
                         <div className="flex items-center gap-3">
