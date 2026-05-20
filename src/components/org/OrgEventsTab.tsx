@@ -52,6 +52,9 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
   const [showChartForm, setShowChartForm] = useState(false)
   const [chartName, setChartName] = useState('')
 
+  const [showRejectModal, setShowRejectModal] = useState(false)
+  const [rejectMessage, setRejectMessage] = useState('')
+
   const fetchEvents = async (p: number) => {
     setLoading(true)
     try { const r = await getAllEvents({ organizationId: orgId, page: p, size: 12 }); setEvents(r.data); setTotal(r.total) }
@@ -130,8 +133,15 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
     } catch (e: any) { setError(e?.response?.data?.message || 'Failed to submit event.') }
   }
 
-  const handleAcceptSub = async (_adminId: string) => { if (!selectedEvent) return; try { await acceptSubmission(selectedEvent.id, { message: '' }); fetchSubmissions(selectedEvent.id) } catch { } }
-  const handleRejectSub = async (_adminId: string) => { if (!selectedEvent) return; try { await rejectSubmission(selectedEvent.id, { message: '' }); fetchSubmissions(selectedEvent.id) } catch { } }
+  const handleAcceptSub = async (_adminId: string) => {
+    if (!selectedEvent) return
+    try { await acceptSubmission(selectedEvent.id, {}); fetchSubmissions(selectedEvent.id) } catch { }
+  }
+  const handleRejectSub = (_adminId: string) => { setRejectMessage(''); setShowRejectModal(true) }
+  const handleConfirmReject = async () => {
+    if (!selectedEvent) return
+    try { await rejectSubmission(selectedEvent.id, { message: rejectMessage || undefined }); fetchSubmissions(selectedEvent.id); setShowRejectModal(false) } catch { }
+  }
 
   const formatDate = (d: string) => { try { return new Date(d).toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' }) } catch { return d } }
   const statusColor = (s: string) => s === 'Published' ? 'bg-emerald-500/15 text-emerald-400' : s === 'Cancelled' ? 'bg-red-500/15 text-red-400' : s === 'Approved' ? 'bg-blue-500/15 text-blue-400' : s === 'Pending' ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-700/40 text-slate-400'
@@ -526,6 +536,27 @@ export function OrgEventsTab({ orgId }: { orgId: string }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Reject Modal ── */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowRejectModal(false)}>
+          <div className="glass w-full max-w-sm p-6 fade-in" onClick={e => e.stopPropagation()}>
+            <h2 className="mb-1">Reject Submission</h2>
+            <p className="text-xs text-slate-400 mb-4">Provide a reason (optional) so the organizer knows what to fix.</p>
+            <textarea
+              value={rejectMessage}
+              onChange={e => setRejectMessage(e.target.value)}
+              rows={3}
+              placeholder="e.g. Missing session details, incomplete venue address…"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-indigo-500/50 focus:outline-none resize-none"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300 hover:text-white" onClick={() => setShowRejectModal(false)}>Cancel</button>
+              <button className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-400" onClick={handleConfirmReject}>Reject</button>
+            </div>
+          </div>
         </div>
       )}
 
