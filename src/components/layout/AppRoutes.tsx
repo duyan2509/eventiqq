@@ -7,9 +7,9 @@ import { SwitchRolePage } from '../../pages/SwitchRolePage'
 import { AdminPage } from '../../pages/AdminPage'
 import { OrganizationsPage } from '../../pages/OrganizationsPage'
 import { EventsPage } from '../../pages/EventsPage'
-
 import { InvitationsPage } from '../../pages/InvitationsPage'
 import { SeatDesignerPage } from '../../pages/SeatDesignerPage'
+import { SeatBookingPage } from '../../pages/SeatBookingPage'
 import { StripeReturnPage, StripeRefreshPage } from '../../pages/StripeCallbackPage'
 import { OrgWorkspacePage } from '../../pages/OrgWorkspacePage'
 import type { Role, UserInfo } from '../../types/auth'
@@ -36,10 +36,10 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged }: AppRoutesPro
       <Route path="/events" element={<EventsPage />} />
       <Route path="/organizations" element={<AuthGuard user={user} message="Please sign in to view organizations."><OrganizationsPage /></AuthGuard>} />
       <Route path="/organizations/:orgId" element={<AuthGuard user={user} message="Please sign in to view this organization."><OrgWorkspacePage user={user} /></AuthGuard>} />
-
       <Route path="/invitations" element={<AuthGuard user={user} message="Please sign in to view invitations."><InvitationsPage /></AuthGuard>} />
       <Route path="/switch-role" element={<AuthGuard user={user} message="Please sign in to switch roles.">{user && <SwitchRolePage user={user} onRoleChanged={onRoleChanged} />}</AuthGuard>} />
       <Route path="/admin" element={user?.currentRole === 'Admin' ? <AdminPage /> : <div className="glass p-8 text-center text-sm text-slate-400">Admin access only.</div>} />
+      <Route path="/sessions/:sessionId/book" element={<AuthGuard user={user} message="Please sign in to book seats."><SeatBookingPage /></AuthGuard>} />
       <Route path="/events/:eventId/seat-design" element={<AuthGuard user={user} message="Please sign in to use Seat Designer."><SeatDesignerPage /></AuthGuard>} />
       <Route path="/events/:eventId/seat-design/:seatMapId" element={<AuthGuard user={user} message="Please sign in to use Seat Designer."><SeatDesignerPage /></AuthGuard>} />
       <Route path="/organizations/:orgId/payment/return" element={<AuthGuard user={user} message="Please sign in to complete Stripe setup."><StripeReturnPage /></AuthGuard>} />

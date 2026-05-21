@@ -67,6 +67,58 @@ export interface CreateSeatMapDto {
   canvasSettings?: string
 }
 
+export interface SeatMapLayoutResponse extends SeatMapResponse {
+  sessionId?: string
+  totalSeats: number
+  sections: SeatSectionLayoutResponse[]
+  objects: SeatObjectResponse[]
+}
+
+export interface SeatSectionLayoutResponse {
+  id: string
+  seatMapId: string
+  label: string
+  sectionType: string
+  geometry?: string
+  style?: string
+  legendId?: string
+  sortOrder: number
+  rows: SeatRowLayoutResponse[]
+}
+
+export interface SeatRowLayoutResponse {
+  id: string
+  sectionId: string
+  label: string
+  rowNumber: number
+  curve?: string
+  seatSpacing: number
+  seats: SeatLayoutItemResponse[]
+}
+
+export interface SeatLayoutItemResponse {
+  id: string
+  rowId: string
+  label: string
+  seatNumber: number
+  seatType: string
+  position?: string
+  legendId?: string
+  customProperties?: string
+}
+
+export interface SeatStatusUpdate {
+  seatId: string
+  status: string
+  heldUntil?: string
+}
+
+export interface HoldSeatsResponse {
+  seatIds: string[]
+  status: string
+  heldUntil: string
+}
+
 export interface SeatMapStatsResponse {
   totalSeats: number
   availableSeats: number

@@ -19,7 +19,7 @@ interface CursorInfo { userId: string; x: number; y: number; color: string }
 
 const SECTION_TYPES = ['Rectangle', 'Polygon', 'Arc'] as const
 const OBJECT_TYPES = ['Stage', 'Label', 'Image', 'Shape', 'Aisle'] as const
-const SEAT_COLORS: Record<string, string> = { Available: '#4ade80', Reserved: '#facc15', Sold: '#ef4444', Blocked: '#6b7280' }
+const SEAT_COLORS: Record<string, string> = { Available: '#4ade80', Holding: '#facc15', Sold: '#ef4444', Blocked: '#6b7280' }
 
 export function SeatDesignerPage() {
   const { eventId, seatMapId: paramSeatMapId } = useParams<{ eventId: string; seatMapId?: string }>()
