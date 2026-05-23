@@ -1,4 +1,4 @@
-import type { SeatMapResponse, SeatMapDetailResponse, CreateSeatMapDto, SeatMapStatsResponse } from '../types/seat'
+import type { SeatMapResponse, SeatMapDetailResponse, SeatMapLayoutResponse, HoldSeatsResponse, CreateSeatMapDto, SeatMapStatsResponse } from '../types/seat'
 import { http } from './httpClient'
 
 export async function getSeatMapsByEvent(eventId: string): Promise<SeatMapResponse[]> {
@@ -28,4 +28,18 @@ export async function getSeatMapStats(id: string): Promise<SeatMapStatsResponse>
 export async function publishSeatMap(id: string): Promise<SeatMapResponse> {
   const res = await http.post<SeatMapResponse>(`/seat-maps/${id}/publish`)
   return res.data
+}
+
+export async function getSeatMapBySession(sessionId: string): Promise<SeatMapLayoutResponse> {
+  const res = await http.get<SeatMapLayoutResponse>(`/seat-maps/sessions/${sessionId}`)
+  return res.data
+}
+
+export async function holdSeats(seatMapId: string, seatIds: string[]): Promise<HoldSeatsResponse> {
+  const res = await http.post<HoldSeatsResponse>(`/seat-maps/${seatMapId}/seats/hold`, { seatIds })
+  return res.data
+}
+
+export async function releaseSeats(seatMapId: string, seatIds: string[]): Promise<void> {
+  await http.delete(`/seat-maps/${seatMapId}/seats/hold`, { data: { seatIds } })
 }

@@ -3,48 +3,34 @@ export interface SeatMapResponse {
   chartId: string
   eventId: string
   organizationId: string
+  sessionId?: string
   name: string
   status: string
   canvasSettings?: string
   version: number
+  totalSeats: number
   createdAt: string
   updatedAt?: string
 }
 
-export interface SeatMapDetailResponse extends SeatMapResponse {
-  sections: SeatSectionResponse[]
-  objects: SeatObjectResponse[]
-}
-
-export interface SeatSectionResponse {
+export interface SeatResponse {
   id: string
   seatMapId: string
   label: string
-  sectionType: string
-  geometry?: string
-  style?: string
-  legendId?: string
-  sortOrder: number
-  rows: SeatRowResponse[]
-}
-
-export interface SeatRowResponse {
-  id: string
-  sectionId: string
-  label: string
-  rowNumber: number
-  curve?: string
-  seatSpacing: number
-  seats: SeatResponse[]
-}
-
-export interface SeatResponse {
-  id: string
-  rowId: string
-  label: string
   seatNumber: number
   status: string
-  seatType: string
+  seatType: number
+  position?: string
+  legendId?: string
+  customProperties?: string
+}
+
+export interface SeatLayoutResponse {
+  id: string
+  seatMapId: string
+  label: string
+  seatNumber: number
+  seatType: number
   position?: string
   legendId?: string
   customProperties?: string
@@ -60,6 +46,16 @@ export interface SeatObjectResponse {
   zIndex: number
 }
 
+export interface SeatMapDetailResponse extends SeatMapResponse {
+  seats: SeatResponse[]
+  objects: SeatObjectResponse[]
+}
+
+export interface SeatMapLayoutResponse extends SeatMapResponse {
+  seats: SeatLayoutResponse[]
+  objects: SeatObjectResponse[]
+}
+
 export interface CreateSeatMapDto {
   chartId: string
   eventId: string
@@ -67,12 +63,22 @@ export interface CreateSeatMapDto {
   canvasSettings?: string
 }
 
+export interface SeatStatusUpdate {
+  seatId: string
+  status: string
+  heldUntil?: string
+}
+
+export interface HoldSeatsResponse {
+  seatIds: string[]
+  status: string
+  heldUntil: string
+}
+
 export interface SeatMapStatsResponse {
   totalSeats: number
   availableSeats: number
-  reservedSeats: number
+  holdingSeats: number
   soldSeats: number
   blockedSeats: number
-  totalSections: number
-  totalRows: number
 }

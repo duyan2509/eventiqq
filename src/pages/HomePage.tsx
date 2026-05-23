@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { EventQuickViewData } from '../types/event'
 import { getAllEvents } from '../api/eventApi'
+import { formatPrice } from '../utils/format'
 
 export function HomePage() {
   const [events, setEvents] = useState<EventQuickViewData[]>([])
@@ -71,7 +72,7 @@ export function HomePage() {
                 <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
                   <span> {formatDate(ev.start)}</span>
                   {ev.lowestPrice !== undefined && ev.lowestPrice !== null && (
-                    <span className="font-medium text-emerald-400">{ev.lowestPrice === 0 ? 'Free' : `${ev.lowestPrice.toLocaleString()}₫`}</span>
+                    <span className="font-medium text-emerald-400">{formatPrice(ev.lowestPrice)}</span>
                   )}
                 </div>
               </Link>
