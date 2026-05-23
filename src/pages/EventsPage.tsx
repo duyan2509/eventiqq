@@ -20,7 +20,6 @@ export function EventsPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
   const [filterProvince] = useState('')
 
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null)
@@ -46,7 +45,7 @@ export function EventsPage() {
         page: targetPage,
         size: 12,
         query: searchQuery || undefined,
-        status: filterStatus || undefined,
+        status: 'Approved',
         province: filterProvince || undefined
       })
       setEvents(r.data)
@@ -241,16 +240,7 @@ export function EventsPage() {
             onChange={e => setSearchQuery(e.target.value)}
             className="flex-1 sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 text-sm focus:border-indigo-500/50 focus:outline-none placeholder:text-slate-500"
           />
-          <select 
-            value={filterStatus}
-            onChange={e => setFilterStatus(e.target.value)}
-            className="w-32 rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 text-sm text-slate-300 focus:border-indigo-500/50 focus:outline-none"
-          >
-            <option value="">All Status</option>
-            <option value="Approved">Available</option>
-            <option value="Published">Published</option>
-          </select>
-          <button type="submit" className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition-colors">
+<button type="submit" className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition-colors">
             Search
           </button>
         </form>

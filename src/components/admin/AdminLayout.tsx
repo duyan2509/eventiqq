@@ -1,5 +1,4 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { signOut } from '../../api/authApi'
 import type { UserInfo } from '../../types/auth'
 
 interface Props {
@@ -33,11 +32,6 @@ const NAV_ITEMS = [
 export function AdminLayout({ user, onSignOut }: Props) {
   const navigate = useNavigate()
 
-  const handleSignOut = async () => {
-    await signOut()
-    onSignOut()
-    navigate('/')
-  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900">
@@ -79,7 +73,7 @@ export function AdminLayout({ user, onSignOut }: Props) {
             Main Site
           </button>
           <button
-            onClick={handleSignOut}
+            onClick={onSignOut}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>

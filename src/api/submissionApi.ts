@@ -21,3 +21,8 @@ export async function rejectSubmission(eventId: string, dto: UpdateSubmissionDto
   const res = await http.post<SubmissionResponse>(`/events/${eventId}/submissions/reject`, dto)
   return res.data
 }
+
+export async function cancelSubmission(eventId: string, orgId: string, dto: UpdateSubmissionDto): Promise<SubmissionResponse> {
+  const res = await http.post<SubmissionResponse>(`/events/${eventId}/submissions/${orgId}/cancel`, dto)
+  return res.data
+}

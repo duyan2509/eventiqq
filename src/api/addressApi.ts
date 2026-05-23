@@ -12,7 +12,12 @@ export interface Commune {
 
 function normalizeList(data: unknown): { code: string; name: string }[] {
   if (Array.isArray(data)) return data
-  if (data && typeof data === 'object' && 'data' in data && Array.isArray((data as any).data)) return (data as any).data
+  if (data && typeof data === 'object') {
+    const obj = data as any
+    if (Array.isArray(obj.data)) return obj.data
+    if (Array.isArray(obj.provinces)) return obj.provinces
+    if (Array.isArray(obj.communes)) return obj.communes
+  }
   return []
 }
 

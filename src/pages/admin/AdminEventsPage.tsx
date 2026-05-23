@@ -23,7 +23,7 @@ function formatDate(iso: string) {
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-type ActionModal = { eventId: string; name: string; mode: 'reject' | 'cancel' }
+type ActionModal = { eventId: string; name: string }
 
 export function AdminEventsPage() {
   const [events, setEvents] = useState<EventQuickViewData[]>([])
@@ -108,7 +108,7 @@ export function AdminEventsPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Event Management</h1>
-        <p className="text-sm text-gray-500">Review, approve, or cancel event submissions.</p>
+        <p className="text-sm text-gray-500">Review, approve, or reject event submissions.</p>
       </div>
 
       {/* Search bar */}
@@ -219,23 +219,14 @@ export function AdminEventsPage() {
                           </button>
                           <button
                             disabled={actionLoading === evt.id}
-                            onClick={() => { setActionModal({ eventId: evt.id, name: evt.name, mode: 'reject' }); setActionMsg('') }}
+                            onClick={() => { setActionModal({ eventId: evt.id, name: evt.name }); setActionMsg('') }}
                             className="rounded-lg border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
                           >
                             Reject
                           </button>
                         </div>
                       )}
-                      {evt.status.toLowerCase() === 'approved' && (
-                        <button
-                          disabled={actionLoading === evt.id}
-                          onClick={() => { setActionModal({ eventId: evt.id, name: evt.name, mode: 'cancel' }); setActionMsg('') }}
-                          className="rounded-lg border border-orange-200 px-3 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-40"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                      {!['pending', 'approved'].includes(evt.status.toLowerCase()) && (
+                      {!['pending'].includes(evt.status.toLowerCase()) && (
                         <span className="text-xs text-gray-300">—</span>
                       )}
                     </td>
@@ -268,7 +259,7 @@ export function AdminEventsPage() {
         </div>
       )}
 
-      {/* Reject / Cancel modal */}
+      {/* Reject modal */}
       {actionModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
@@ -278,15 +269,9 @@ export function AdminEventsPage() {
             className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6 shadow-xl"
             onClick={e => e.stopPropagation()}
           >
-            <h2 className="mb-1 text-base font-semibold text-gray-900">
-              {actionModal.mode === 'cancel' ? 'Cancel Event' : 'Reject Event'}
-            </h2>
+            <h2 className="mb-1 text-base font-semibold text-gray-900">Reject Event</h2>
             <p className="mb-4 text-sm text-gray-500">
-              {actionModal.mode === 'cancel' ? 'Cancel' : 'Reject'}{' '}
-              <strong className="text-gray-800">{actionModal.name}</strong>?
-              {actionModal.mode === 'cancel' && (
-                <span className="block mt-1 text-xs text-orange-600">This will revert the event to Draft status.</span>
-              )}
+              Reject <strong className="text-gray-800">{actionModal.name}</strong>?
             </p>
             <div className="mb-4">
               <label className="mb-1.5 block text-xs font-medium text-gray-600">Reason (optional)</label>
@@ -308,11 +293,9 @@ export function AdminEventsPage() {
               <button
                 disabled={!!actionLoading}
                 onClick={handleActionConfirm}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-                  actionModal.mode === 'cancel' ? 'bg-orange-500 hover:bg-orange-400' : 'bg-red-500 hover:bg-red-400'
-                }`}
+                className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-400 transition-colors disabled:opacity-50"
               >
-                {actionLoading ? '…' : actionModal.mode === 'cancel' ? 'Cancel Event' : 'Reject'}
+                {actionLoading ? '…' : 'Reject'}
               </button>
             </div>
           </div>

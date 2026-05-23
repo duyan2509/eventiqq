@@ -21,7 +21,7 @@ const DETAIL_TABS: { key: DetailTab; label: string }[] = [
   { key: 'submissions', label: 'Submissions' },
 ]
 
-export function OrgEventsTab({ orgId, canEdit, isDesigner }: { orgId: string; canEdit: boolean; isDesigner?: boolean }) {
+export function OrgEventsTab({ orgId, canEdit, isDesigner, isOrg }: { orgId: string; canEdit: boolean; isDesigner?: boolean; isOrg?: boolean }) {
   const [events, setEvents] = useState<EventQuickViewData[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -51,6 +51,11 @@ export function OrgEventsTab({ orgId, canEdit, isDesigner }: { orgId: string; ca
     setLoadingDetail(true); setDetailTab('info')
     try { setSelectedEvent(await getEventDetail(id)) } catch { }
     finally { setLoadingDetail(false) }
+  }
+
+  const refreshSelectedEvent = async () => {
+    if (!selectedEvent) return
+    try { setSelectedEvent(await getEventDetail(selectedEvent.id)) } catch {}
   }
 
   const handleClose = () => setSelectedEvent(null)
@@ -88,7 +93,7 @@ export function OrgEventsTab({ orgId, canEdit, isDesigner }: { orgId: string; ca
                   {detailTab === 'charts' && <EventChartsTab eventId={selectedEvent.id} orgId={orgId} onClose={handleClose} canEdit={canEdit} isDesigner={isDesigner} eventStatus={selectedEvent.status} />}
                   {detailTab === 'sessions' && <EventSessionsTab eventId={selectedEvent.id} orgId={orgId} canEdit={canEdit} eventStatus={selectedEvent.status} />}
                   {detailTab === 'legends' && <EventLegendsTab eventId={selectedEvent.id} orgId={orgId} canEdit={canEdit} eventStatus={selectedEvent.status} />}
-                  {detailTab === 'submissions' && <EventSubmissionsTab event={selectedEvent} orgId={orgId} onRefreshList={() => fetchEvents(page)} />}
+                  {detailTab === 'submissions' && <EventSubmissionsTab event={selectedEvent} orgId={orgId} onRefreshList={() => { fetchEvents(page); refreshSelectedEvent() }} isOrg={isOrg} />}
                 </div>
               </>)}
           </div>

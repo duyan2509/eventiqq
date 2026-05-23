@@ -9,7 +9,7 @@ export function HomePage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getAllEvents({ page: 1, size: 6 })
+    getAllEvents({ page: 1, size: 6, status: 'Approved' })
       .then(r => setEvents(r.data))
       .catch(() => { })
       .finally(() => setLoading(false))

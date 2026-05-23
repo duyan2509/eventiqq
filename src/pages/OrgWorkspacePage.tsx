@@ -279,7 +279,7 @@ export function OrgWorkspacePage({ user }: Props) {
 
           {/* ── EVENTS ── */}
           {tab === 'events' && orgId && (
-            <OrgEventsTab orgId={orgId} canEdit={canEdit} isDesigner={isDesigner} />
+            <OrgEventsTab orgId={orgId} canEdit={canEdit} isDesigner={isDesigner} isOrg={isOrgRole} />
           )}
 
           {/* ── MEMBERS ── */}
