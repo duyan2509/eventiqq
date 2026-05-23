@@ -6,6 +6,7 @@ import type { OrganizationDetail } from '../types/organization'
 import type { PaymentStatusResponse } from '../types/index'
 import { getOrganizationById, getMyOrganizations } from '../api/organizationApi'
 import { getPaymentStatus, connectStripeAccount, disconnectStripeAccount } from '../api/paymentApi'
+import { getMyMembership } from '../api/memberApi'
 
 import { OrgMembersTab } from '../components/org/OrgMembersTab'
 import { OrgInvitationsTab } from '../components/org/OrgInvitationsTab'
@@ -43,6 +44,7 @@ export function OrgWorkspacePage({ user }: Props) {
 
   // Members
   const [memberCount, setMemberCount] = useState(0)
+  const [isDesigner, setIsDesigner] = useState(false)
 
   // Invitations
   const [invSuccess, setInvSuccess] = useState<string | null>(null)
@@ -65,6 +67,11 @@ export function OrgWorkspacePage({ user }: Props) {
 
     getMyOrganizations(1, 100).then(r => setMyOrgs(r.data)).catch(() => { })
   }, [orgId])
+
+  useEffect(() => {
+    if (!orgId || user?.currentRole !== 'Staff' || user?.orgId !== orgId) return
+    getMyMembership(orgId).then(m => setIsDesigner(m.isDesigner)).catch(() => {})
+  }, [orgId, user?.currentRole, user?.orgId])
 
   // Close switcher on outside click
   useEffect(() => {
@@ -117,6 +124,7 @@ export function OrgWorkspacePage({ user }: Props) {
   const isStaffRole = user?.currentRole === 'Staff'
   const isCorrectOrg = user?.orgId === orgId
   const needsRoleSwitch = (!isOrgRole && !isStaffRole) || !isCorrectOrg
+  const canEdit = !isStaffRole
 
   if (loadingOrg) return (
     <div className="flex h-[calc(100vh-57px)] items-center justify-center">
@@ -156,7 +164,7 @@ export function OrgWorkspacePage({ user }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto space-y-0.5 p-2">
-          {NAV.filter(item => !isStaffRole || item.key === 'members').map(item => (
+          {NAV.filter(item => !isStaffRole || item.key === 'events' || item.key === 'members').map(item => (
             <button
               key={item.key}
               onClick={() => handleTab(item.key)}
@@ -271,7 +279,7 @@ export function OrgWorkspacePage({ user }: Props) {
 
           {/* ── EVENTS ── */}
           {tab === 'events' && orgId && (
-            <OrgEventsTab orgId={orgId} />
+            <OrgEventsTab orgId={orgId} canEdit={canEdit} isDesigner={isDesigner} />
           )}
 
           {/* ── MEMBERS ── */}

@@ -1,5 +1,7 @@
 export interface EventQuickViewData {
   id: string
+  organizationId: string
+  organizationName?: string
   eventBanner?: string
   name: string
   start: string

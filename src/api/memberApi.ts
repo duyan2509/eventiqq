@@ -17,3 +17,8 @@ export async function changeMemberPermission(orgId: string, memberId: string, dt
 export async function deleteMember(orgId: string, memberId: string): Promise<void> {
   await http.delete(`/organizations/${orgId}/members/${memberId}`)
 }
+
+export async function getMyMembership(orgId: string): Promise<MemberResponse> {
+  const res = await http.get<MemberResponse>(`/organizations/${orgId}/members/me`)
+  return res.data
+}

@@ -21,7 +21,6 @@ export function AppShell() {
   const location = useLocation()
 
   useEffect(() => {
-    // Try to restore session using HttpOnly cookie (no localStorage)
     tryRefreshSession()
       .then(u => setUser(u))
       .finally(() => setRestoring(false))
@@ -31,6 +30,8 @@ export function AppShell() {
   const handleRoleChange = (_role: Role, updatedUser: UserInfo) => { setUser(updatedUser) }
   const currentPath = location.pathname
   const isOrgWorkspace = /^\/organizations\/[^/]+/.test(currentPath)
+  const isAdminRoute = currentPath.startsWith('/admin')
+  const isSeatDesigner = /^\/events\/[^/]+\/seat-design/.test(currentPath)
 
   if (restoring) {
     return (
@@ -40,6 +41,17 @@ export function AppShell() {
           <p className="text-sm text-slate-400">Loading...</p>
         </div>
       </div>
+    )
+  }
+
+  if (isAdminRoute || isSeatDesigner) {
+    return (
+      <AppRoutes
+        user={user}
+        onAuthenticated={(nextUser) => { setUser(nextUser); navigate('/') }}
+        onRoleChanged={handleRoleChange}
+        onSignOut={handleSignOut}
+      />
     )
   }
 
@@ -68,8 +80,8 @@ export function AppShell() {
           })}
           {user?.currentRole === 'Admin' && (
             <button
-              className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${currentPath === '/admin' ? 'bg-indigo-500/15 text-indigo-300' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}
-              onClick={() => navigate('/admin')}
+              className="rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+              onClick={() => navigate('/admin/dashboard')}
             >
               Admin
             </button>
@@ -103,6 +115,7 @@ export function AppShell() {
           user={user}
           onAuthenticated={(nextUser) => { setUser(nextUser); navigate('/') }}
           onRoleChanged={handleRoleChange}
+          onSignOut={handleSignOut}
         />
       ) : (
         <main className="mx-auto max-w-7xl px-6 py-8">
@@ -110,6 +123,7 @@ export function AppShell() {
             user={user}
             onAuthenticated={(nextUser) => { setUser(nextUser); navigate('/') }}
             onRoleChanged={handleRoleChange}
+            onSignOut={handleSignOut}
           />
         </main>
       )}

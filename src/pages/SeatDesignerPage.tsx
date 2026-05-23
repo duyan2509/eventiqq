@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import type { UserInfo } from '../types/auth'
+import { getMyMembership } from '../api/memberApi'
 import { getSeatMapById, getSeatMapsByEvent, createSeatMap } from '../api/seatApi'
 import type { SeatMapResponse } from '../types/seat'
 import { getVersions, saveVersion, restoreVersion } from '../api/seatVersionApi'
@@ -7,11 +9,13 @@ import type { SeatMapVersionResponse } from '../api/seatVersionApi'
 import { getLegends } from '../api/legendApi'
 import type { LegendResponse } from '../types/index'
 import * as hub from '../api/seatDesignHub'
+import { getCharts } from '../api/chartApi'
+import type { ChartResponse } from '../types/index'
 
 /* ===== Local types ===== */
 interface FlatSeat {
   id: string; seatMapId: string; label: string; seatNumber: number
-  status: string; seatType: string; legendId?: string; x: number; y: number
+  status: string; seatType: number; legendId?: string; x: number; y: number
 }
 interface OnlineUser { userId: string; email: string; displayName: string; avatarColor: string }
 interface CursorInfo { userId: string; x: number; y: number; color: string }
@@ -21,13 +25,28 @@ type MouseState = 'idle' | 'panning' | 'rubber-band' | 'move-seats' | 'seat-draw
 
 const SEAT_RADIUS = 11
 const SEAT_COLORS: Record<string, string> = { Available: '#4ade80', Holding: '#facc15', Sold: '#ef4444', Blocked: '#6b7280' }
-const TYPE_ICONS: Record<string, string> = { Regular: '', Wheelchair: '♿', Companion: 'C', Restricted: '✕' }
-const SEAT_TYPES = ['Regular', 'Wheelchair', 'Companion', 'Restricted'] as const
+// Fill tint per seat type (1-4) — blended with status color on canvas via border
+const TYPE_BORDER_COLORS: Record<number, string> = { 1: '#94a3b8', 2: '#a78bfa', 3: '#fb923c', 4: '#f472b6' }
 
-export function SeatDesignerPage() {
+function bandLabel(i: number): string {
+  let label = ''; let n = i
+  do { label = String.fromCharCode(65 + (n % 26)) + label; n = Math.floor(n / 26) - 1 } while (n >= 0)
+  return label
+}
+
+export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const { eventId, seatMapId: paramSeatMapId } = useParams<{ eventId: string; seatMapId?: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const seatMapId = paramSeatMapId || ''
+
+  const [readOnly, setReadOnly] = useState(() => searchParams.get('readOnly') === 'true')
+  useEffect(() => {
+    if (searchParams.get('readOnly') === 'true') { setReadOnly(true); return }
+    const orgId = searchParams.get('orgId')
+    if (!orgId || user?.currentRole !== 'Staff') return
+    getMyMembership(orgId).then(m => setReadOnly(!m.isDesigner)).catch(() => setReadOnly(true))
+  }, [searchParams, user?.currentRole])
 
   /* ===== Seat Map Picker ===== */
   const [seatMaps, setSeatMaps] = useState<SeatMapResponse[]>([])
@@ -41,6 +60,15 @@ export function SeatDesignerPage() {
     setLoadingMaps(true)
     getSeatMapsByEvent(eventId).then(r => setSeatMaps(Array.isArray(r) ? r : [])).catch(() => {}).finally(() => setLoadingMaps(false))
   }, [eventId, seatMapId])
+
+  const handleOpenCreateMap = async () => {
+    setShowCreateMap(true)
+    if (!eventId) return
+    setLoadingCharts(true)
+    try { const r = await getCharts(eventId); setCharts(r.data); if (r.data.length > 0) setNewMapChartId(r.data[0].id) }
+    catch { }
+    finally { setLoadingCharts(false) }
+  }
 
   const handleCreateSeatMap = async () => {
     if (!eventId || !newMapName || !newMapChartId) return
@@ -56,7 +84,7 @@ export function SeatDesignerPage() {
             <p className="text-sm text-slate-400">Select or create a seat map for this event.</p>
             <Link to="/events" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← Back to events</Link>
           </div>
-          <button className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={() => setShowCreateMap(true)}>+ Create Seat Map</button>
+          <button className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={handleOpenCreateMap}>+ Create Seat Map</button>
         </div>
         {showCreateMap && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowCreateMap(false)}>
@@ -64,7 +92,18 @@ export function SeatDesignerPage() {
               <h2 className="mb-4">Create Seat Map</h2>
               <div className="space-y-4">
                 <div><label>Name</label><input value={newMapName} onChange={e => setNewMapName(e.target.value)} placeholder="e.g. Main Hall" /></div>
-                <div><label>Chart ID</label><input value={newMapChartId} onChange={e => setNewMapChartId(e.target.value)} placeholder="GUID" /></div>
+                <div>
+                  <label>Chart</label>
+                  {loadingCharts ? (
+                    <p className="text-xs text-slate-400">Loading charts…</p>
+                  ) : charts.length === 0 ? (
+                    <p className="text-xs text-red-400">No charts found. Create a chart for this event first.</p>
+                  ) : (
+                    <select value={newMapChartId} onChange={e => setNewMapChartId(e.target.value)}>
+                      {charts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  )}
+                </div>
                 <div className="flex justify-end gap-2">
                   <button className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-300" onClick={() => setShowCreateMap(false)}>Cancel</button>
                   <button className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400" onClick={handleCreateSeatMap}>Create</button>
@@ -99,7 +138,7 @@ export function SeatDesignerPage() {
   }
 
   /* ===== Designer ===== */
-  return <Designer seatMapId={seatMapId} eventId={eventId || ''} />
+  return <Designer seatMapId={seatMapId} eventId={eventId || ''} readOnly={readOnly} />
 }
 
 /* ===== LegendSection — reusable, handles loading/error/retry ===== */
@@ -159,7 +198,7 @@ function LegendSection({ legends, loading, error, onRetry, mode, selectedSeats, 
 }
 
 /* ===== Designer component (separated to avoid hook-ordering issues with picker early return) ===== */
-function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }) {
+function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId: string; readOnly: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   /* Canvas view */
@@ -255,7 +294,7 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
       conn.on('CurrentPresence', (d: { onlineUsers: OnlineUser[] }) => setOnlineUsers(d.onlineUsers || []))
       conn.on('UserJoined', (u: OnlineUser) => setOnlineUsers(prev => [...prev.filter(x => x.userId !== u.userId), u]))
       conn.on('UserLeft', (uid: string) => { setOnlineUsers(prev => prev.filter(x => x.userId !== uid)); setCursors(prev => prev.filter(c => c.userId !== uid)) })
-      conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => setCursors(prev => [...prev.filter(c => c.userId !== d.userId), { userId: d.userId, x: d.x, y: d.y, color: '#818cf8' }]))
+      conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => setCursors(prev => [...prev.filter(c => c.userId !== d.userId), { userId: d.userId, x: d.x, y: d.y, color: '#818cf8' /* overridden at draw time */ }]))
 
       /* Seat events */
       conn.on('SeatAdded', (seat: any) => {
@@ -336,16 +375,14 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
       ctx.beginPath(); ctx.arc(drawX, drawY, R, 0, Math.PI * 2)
       ctx.fillStyle = fillColor; ctx.fill()
 
-      /* Stroke = legend color (3px border) */
+      /* Outer border: legend color > type color */
       const legendColor = seat.legendId ? legendColorMap.get(seat.legendId) : null
-      if (legendColor) {
-        ctx.strokeStyle = legendColor; ctx.lineWidth = 3 / zoom; ctx.stroke()
-      }
+      const borderColor = legendColor || TYPE_BORDER_COLORS[seat.seatType] || '#94a3b8'
+      ctx.strokeStyle = borderColor; ctx.lineWidth = 3 / zoom; ctx.stroke()
 
-      /* Seat label / type icon */
-      const icon = TYPE_ICONS[seat.seatType] || ''
-      ctx.fillStyle = '#0f172a'; ctx.font = `bold ${icon ? 8 : 7}px Inter,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-      ctx.fillText(icon || String(seat.seatNumber), drawX, drawY)
+      /* Seat label */
+      ctx.fillStyle = '#0f172a'; ctx.font = `bold 7px Inter,sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+      ctx.fillText(seat.label || String(seat.seatNumber), drawX, drawY)
     })
 
     /* Rubber-band selection rect */
@@ -384,11 +421,34 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
 
     /* Remote cursors */
     cursors.forEach(c => {
-      ctx.save(); ctx.fillStyle = c.color; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + 10 / zoom, c.y + 14 / zoom); ctx.lineTo(c.x + 4 / zoom, c.y + 14 / zoom); ctx.lineTo(c.x, c.y + 20 / zoom); ctx.closePath(); ctx.fill(); ctx.restore()
+      const user = onlineUsers.find(u => u.userId === c.userId)
+      const color = user?.avatarColor || '#818cf8'
+      const name = user?.displayName || user?.email || ''
+      const S = 1 / zoom
+      ctx.save()
+      ctx.fillStyle = color
+      ctx.beginPath()
+      ctx.moveTo(c.x, c.y)
+      ctx.lineTo(c.x + 10 * S, c.y + 14 * S)
+      ctx.lineTo(c.x + 4 * S, c.y + 14 * S)
+      ctx.lineTo(c.x, c.y + 20 * S)
+      ctx.closePath(); ctx.fill()
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 0.8 * S; ctx.stroke()
+      if (name) {
+        const fontSize = 11 * S
+        ctx.font = `bold ${fontSize}px Inter,sans-serif`
+        const tw = ctx.measureText(name).width
+        const px = c.x + 12 * S, py = c.y + 4 * S
+        ctx.fillStyle = color
+        ctx.beginPath(); ctx.roundRect(px - 3 * S, py - fontSize * 0.85, tw + 6 * S, fontSize * 1.4, 3 * S); ctx.fill()
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+        ctx.fillText(name, px, py - fontSize * 0.75)
+      }
+      ctx.restore()
     })
 
     ctx.restore()
-  }, [seats, legendColorMap, pan, zoom, selectedIds, rubberBand, seatDrawPreview, liveMoveOffset, cursors])
+  }, [seats, legendColorMap, pan, zoom, selectedIds, rubberBand, seatDrawPreview, liveMoveOffset, cursors, onlineUsers])
 
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
@@ -521,29 +581,33 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
       const dx = liveMoveOffset?.dx ?? 0, dy = liveMoveOffset?.dy ?? 0
       setLiveMoveOffset(null); moveStartRef.current = null
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
-      const updates = Array.from(origPositions.entries()).map(([id, pos]) => ({
-        seatId: id, position: JSON.stringify({ x: Math.round(pos.x + dx), y: Math.round(pos.y + dy) })
-      }))
-      setSeats(prev => prev.map(s => {
-        const orig = origPositions.get(s.id)
-        if (!orig) return s
-        return { ...s, x: Math.round(orig.x + dx), y: Math.round(orig.y + dy) }
-      }))
-      hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
+      if (!readOnly) {
+        const updates = Array.from(origPositions.entries()).map(([id, pos]) => ({
+          seatId: id, position: JSON.stringify({ x: Math.round(pos.x + dx), y: Math.round(pos.y + dy) })
+        }))
+        setSeats(prev => prev.map(s => {
+          const orig = origPositions.get(s.id)
+          if (!orig) return s
+          return { ...s, x: Math.round(orig.x + dx), y: Math.round(orig.y + dy) }
+        }))
+        hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
+      }
       return
     }
 
     if (state === 'seat-draw' && seatDrawPreview && seatDrawPreview.length > 0) {
       setSeatDrawPreview(null); seatDrawStart.current = null
-      try {
-        const baseNum = seats.length
-        await Promise.all(seatDrawPreview.map((p, i) =>
-          hub.addSeat(seatMapId, {
-            seatMapId, label: `S${baseNum + i + 1}`, seatNumber: baseNum + i + 1,
-            seatType: 0, position: JSON.stringify({ x: Math.round(p.x), y: Math.round(p.y) })
-          })
-        ))
-      } catch (ex: any) { alert('Place seat failed: ' + (ex?.message || ex)) }
+      if (!readOnly) {
+        try {
+          const baseNum = seats.length
+          await Promise.all(seatDrawPreview.map((p, i) =>
+            hub.addSeat(seatMapId, {
+              seatMapId, label: `S${baseNum + i + 1}`, seatNumber: baseNum + i + 1,
+              seatType: 1, position: JSON.stringify({ x: Math.round(p.x), y: Math.round(p.y) })
+            })
+          ))
+        } catch (ex: any) { alert('Place seat failed: ' + (ex?.message || ex)) }
+      }
     }
   }
 
@@ -558,7 +622,7 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.size > 0) {
         if (!(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
           e.preventDefault()
-          if (!connected) return
+          if (!connected || readOnly) return
           const ids = [...selectedIds]
           setSelectedIds(new Set())
           setSeats(prev => prev.filter(s => !ids.includes(s.id)))
@@ -574,22 +638,44 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
 
   /* ===== Actions ===== */
   const handleDeleteSelected = () => {
-    if (!selectedIds.size || !connected) return
+    if (!selectedIds.size || !connected || readOnly) return
     const ids = [...selectedIds]; setSelectedIds(new Set())
     setSeats(prev => prev.filter(s => !ids.includes(s.id)))
     hub.deleteSeats(seatMapId, ids)?.catch(loadSeatMap)
   }
 
   const handleSetLegend = (legendId: string | null) => {
+    if (readOnly) return
     const ids = [...selectedIds]
     setSeats(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, legendId: legendId ?? undefined } : s))
     hub.setSeatLegend(seatMapId, ids, legendId)?.catch(loadSeatMap)
   }
 
-  const handleUpdateSeatType = (seatType: string) => {
-    const idx = SEAT_TYPES.indexOf(seatType as typeof SEAT_TYPES[number])
-    const updates = [...selectedIds].map(id => ({ seatId: id, seatType: idx }))
+  const handleUpdateSeatType = (seatType: number) => {
+    if (readOnly) return
+    const updates = [...selectedIds].map(id => ({ seatId: id, seatType }))
     setSeats(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, seatType } : s))
+    hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
+  }
+
+  const handleAutoLabel = () => {
+    if (seats.length === 0 || readOnly) return
+    const sorted = [...seats].sort((a, b) => a.y - b.y)
+    const threshold = seatSpacing * 0.7
+    const bands: FlatSeat[][] = []
+    for (const seat of sorted) {
+      const last = bands[bands.length - 1]
+      if (!last || seat.y - last[last.length - 1].y > threshold) bands.push([seat])
+      else last.push(seat)
+    }
+    const assignments: { id: string; label: string }[] = []
+    bands.forEach((band, bi) => {
+      const row = [...band].sort((a, b) => a.x - b.x)
+      row.forEach((seat, ci) => assignments.push({ id: seat.id, label: `${bandLabel(bi)}${ci + 1}` }))
+    })
+    const labelMap = new Map(assignments.map(a => [a.id, a.label]))
+    setSeats(prev => prev.map(s => ({ ...s, label: labelMap.get(s.id) ?? s.label })))
+    const updates = assignments.map(a => ({ seatId: a.id, label: a.label }))
     hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
   }
 
@@ -623,7 +709,9 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
   const selSeatType = selectedSeats.length > 0 ? selectedSeats[0].seatType : null
   const uniformType = selectedSeats.every(s => s.seatType === selSeatType) ? selSeatType : null
 
-  const typeStats = SEAT_TYPES.reduce((acc, t) => ({ ...acc, [t]: seats.filter(s => s.seatType === t).length }), {} as Record<string, number>)
+  const typeStats = [1, 2, 3, 4].reduce((acc, t) => ({ ...acc, [t]: seats.filter(s => s.seatType === t).length }), {} as Record<number, number>)
+  const legendStats = legends.map(l => ({ legend: l, count: seats.filter(s => s.legendId === l.id).length }))
+  const noLegendCount = seats.filter(s => !s.legendId).length
 
   return (
     <div className="flex flex-col" style={{ height: '100vh' }}>
@@ -635,23 +723,36 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_4px_rgba(74,222,128,0.5)]' : 'bg-red-500'}`} />
             <span className="text-[10px] text-slate-500">{connected ? 'Live' : 'Offline'}</span>
           </div>
-          {onlineUsers.length > 0 && (
-            <div className="flex -space-x-1">
+          <div className="flex items-center gap-1.5">
+            <div className="flex -space-x-1.5">
               {onlineUsers.slice(0, 5).map(u => (
-                <div key={u.userId} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 text-[9px] font-bold" style={{ background: u.avatarColor }} title={u.displayName || u.email}>{(u.displayName || u.email)[0]?.toUpperCase()}</div>
+                <div key={u.userId} className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 text-[9px] font-bold shadow-sm" style={{ background: u.avatarColor }} title={u.displayName || u.email}>
+                  {(u.displayName || u.email)[0]?.toUpperCase()}
+                </div>
               ))}
-              {onlineUsers.length > 5 && <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-[9px] text-slate-300">+{onlineUsers.length - 5}</div>}
+              {onlineUsers.length > 5 && (
+                <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-slate-950 bg-slate-700 text-[9px] text-slate-300">+{onlineUsers.length - 5}</div>
+              )}
             </div>
-          )}
+            {onlineUsers.length > 0 && (
+              <span className="text-[10px] text-slate-500">{onlineUsers.length} online</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-slate-500">{Math.round(zoom * 100)}%</span>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.min(4, z * 1.2))}>+</button>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.max(0.2, z * 0.8))}>−</button>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Fit</button>
-          <div className="h-4 w-px bg-slate-700" />
-          <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleSaveVersion}>Save</button>
-          <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleLoadVersions}>Versions</button>
+          {readOnly
+            ? <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400">View Only</span>
+            : (<>
+                <div className="h-4 w-px bg-slate-700" />
+                <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleAutoLabel} title="Auto-assign row/seat labels based on position">Auto-label</button>
+                <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleSaveVersion}>Save</button>
+                <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleLoadVersions}>Versions</button>
+              </>)
+          }
         </div>
       </div>
 
@@ -676,11 +777,11 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
 
           {/* Floating toolbar — Figma-style */}
           <div className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-0.5 rounded-xl border border-slate-700/60 bg-slate-900/90 px-1.5 py-1.5 shadow-xl backdrop-blur-md">
-            {([
+            {(([
               ['select', '↖', 'Select  V'],
               ['pan',    '✋', 'Pan  H'],
               ['seat',   '●', 'Seat  S'],
-            ] as const).map(([key, icon, hint]) => (
+            ] as const).filter(([key]) => !readOnly || key !== 'seat')).map(([key, icon, hint]) => (
               <button key={key}
                 title={hint}
                 onClick={() => setTool(key)}
@@ -747,30 +848,35 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
                 })()}
               </div>
 
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Seat Type</p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {SEAT_TYPES.map(t => (
-                    <button key={t}
-                      className={`rounded-lg px-2 py-2 text-[11px] transition-colors ${uniformType === t ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'border border-slate-700/40 text-slate-400 hover:bg-slate-800/50'}`}
-                      onClick={() => handleUpdateSeatType(t)}>
-                      <span className="mr-1">{TYPE_ICONS[t] || '●'}</span>{t}
-                    </button>
-                  ))}
+              {!readOnly && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Seat Type</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {([1, 2, 3, 4] as const).map(t => (
+                      <button key={t}
+                        className={`rounded-lg py-2 text-[11px] font-semibold transition-colors ${uniformType === t ? 'text-white border-2' : 'border border-slate-700/40 text-slate-400 hover:bg-slate-800/50'}`}
+                        style={uniformType === t ? { borderColor: TYPE_BORDER_COLORS[t], background: TYPE_BORDER_COLORS[t] + '22' } : {}}
+                        onClick={() => handleUpdateSeatType(t)}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <LegendSection
                 legends={legends} loading={legendsLoading} error={legendsError}
-                onRetry={loadLegends} mode="picker"
+                onRetry={loadLegends} mode={readOnly ? 'list' : 'picker'}
                 selectedSeats={selectedSeats} onSelect={handleSetLegend}
               />
 
-              <button
-                className="w-full rounded-lg border border-red-500/30 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                onClick={handleDeleteSelected}>
-                Delete {selectedIds.size === 1 ? 'Seat' : `${selectedIds.size} Seats`}
-              </button>
+              {!readOnly && (
+                <button
+                  className="w-full rounded-lg border border-red-500/30 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                  onClick={handleDeleteSelected}>
+                  Delete {selectedIds.size === 1 ? 'Seat' : `${selectedIds.size} Seats`}
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -781,12 +887,28 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
                     <span className="text-slate-500">Total seats</span>
                     <span className="font-semibold text-slate-200">{seats.length}</span>
                   </div>
-                  {SEAT_TYPES.map(t => typeStats[t] > 0 && (
-                    <div key={t} className="flex justify-between px-3 py-0.5">
-                      <span className="text-slate-500">{t}</span>
-                      <span className="text-slate-400">{typeStats[t]}</span>
-                    </div>
-                  ))}
+                  {legendsLoading ? (
+                    <div className="px-3 py-1 text-[11px] text-slate-600 animate-pulse">Loading legends…</div>
+                  ) : (
+                    <>
+                      {legendStats.map(({ legend, count }) => (
+                        <div key={legend.id} className="flex justify-between px-3 py-0.5">
+                          <span className="flex items-center gap-1.5 text-slate-400 truncate mr-2">
+                            <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 border-2" style={{ borderColor: legend.color || '#64748b' }} />
+                            <span className="truncate">{legend.name}</span>
+                          </span>
+                          <span className="text-slate-300 font-medium tabular-nums">{count}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between px-3 py-0.5">
+                        <span className="flex items-center gap-1.5 text-slate-500">
+                          <span className="h-2.5 w-2.5 rounded-full flex-shrink-0 border border-slate-600" />
+                          None
+                        </span>
+                        <span className="text-slate-400 tabular-nums">{noLegendCount}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -801,11 +923,6 @@ function Designer({ seatMapId, eventId }: { seatMapId: string; eventId: string }
                   ))}
                 </div>
               </div>
-
-              <LegendSection
-                legends={legends} loading={legendsLoading} error={legendsError}
-                onRetry={loadLegends} mode="list"
-              />
             </>
           )}
         </div>

@@ -69,9 +69,13 @@ export function deleteObject(seatMapId: string, objectId: string) {
   return connection?.invoke('DeleteObject', seatMapId, objectId)
 }
 
-// Cursor & selection
+// Cursor & selection — use send() not invoke() so cursor frames don't block the invocation queue
+let _lastCursorSend = 0
 export function sendCursorPosition(seatMapId: string, x: number, y: number) {
-  return connection?.invoke('SendCursorPosition', seatMapId, { x, y })
+  const now = Date.now()
+  if (now - _lastCursorSend < 50) return  // 20fps cap
+  _lastCursorSend = now
+  connection?.send('SendCursorPosition', seatMapId, { x, y })
 }
 
 export function sendSelection(seatMapId: string, elementIds: string[]) {

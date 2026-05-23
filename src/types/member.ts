@@ -3,6 +3,7 @@ export interface MemberResponse {
   userId: string
   email: string
   permissionName: string
+  isDesigner: boolean
 }
 
 export interface ChangePermission {
