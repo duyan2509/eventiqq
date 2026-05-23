@@ -121,3 +121,16 @@ export interface UserResponse {
 export interface BanUserRequest {
   banReason?: string
 }
+
+export interface PlatformConfigResponse {
+  currentFeeRate: number
+  pendingFeeRate?: number
+  effectiveDate?: string
+  payoutDayOfMonth: number
+  updatedAt?: string
+}
+
+export interface UpdatePlatformConfigRequest {
+  pendingFeeRate?: number
+  payoutDayOfMonth?: number
+}
