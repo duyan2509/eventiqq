@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import type { EventQuickViewData, EventDetail } from '../types/event'
 import type { SessionResponse, LegendResponse } from '../types/index'
-import type { SeatMapResponse, SeatMapDetailResponse, SeatMapStatsResponse } from '../types/seat'
-import { getSeatMapsByEvent, getSeatMapById, getSeatMapStats } from '../api/seatApi'
 import { getAllEvents, getEventDetail } from '../api/eventApi'
 import { getSessions } from '../api/sessionApi'
 import { getLegends } from '../api/legendApi'
 import { formatPrice } from '../utils/format'
 
-type DetailTab = 'info' | 'sessions' | 'legends' | 'seatmaps'
+type DetailTab = 'info' | 'sessions' | 'legends'
 
 export function EventsPage() {
+  const navigate = useNavigate()
   const [events, setEvents] = useState<EventQuickViewData[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -28,13 +28,6 @@ export function EventsPage() {
 
   const [sessions, setSessions] = useState<SessionResponse[]>([])
   const [legends, setLegends] = useState<LegendResponse[]>([])
-
-  const [seatMaps, setSeatMaps] = useState<SeatMapResponse[]>([])
-  const [loadingSeatMaps, setLoadingSeatMaps] = useState(false)
-  const [seatMapDetail, setSeatMapDetail] = useState<SeatMapDetailResponse | null>(null)
-  const [loadingSeatMapDetail, setLoadingSeatMapDetail] = useState(false)
-  const [seatMapStats, setSeatMapStats] = useState<SeatMapStatsResponse | null>(null)
-  const [loadingSeatMapStats, setLoadingSeatMapStats] = useState(false)
 
   const fetchEvents = async (p: number, resetPage = false) => {
     setLoading(true)
@@ -70,22 +63,17 @@ export function EventsPage() {
 
   const fetchSessions = async (id: string) => { try { const r = await getSessions(id); setSessions(r.data) } catch { } }
   const fetchLegends = async (id: string) => { try { const r = await getLegends(id); setLegends(r.data) } catch { } }
-  const fetchSeatMaps = async (eventId: string) => { setLoadingSeatMaps(true); setSeatMapDetail(null); setSeatMapStats(null); try { const r = await getSeatMapsByEvent(eventId); setSeatMaps(Array.isArray(r) ? r : []) } catch { setSeatMaps([]) } finally { setLoadingSeatMaps(false) } }
-
-  const handleViewSeatMapDetail = async (id: string) => { setLoadingSeatMapDetail(true); setSeatMapStats(null); try { setSeatMapDetail(await getSeatMapById(id)) } catch { } finally { setLoadingSeatMapDetail(false) } }
-  const handleViewSeatMapStats = async (id: string) => { setLoadingSeatMapStats(true); try { setSeatMapStats(await getSeatMapStats(id)) } catch { } finally { setLoadingSeatMapStats(false) } }
 
   const handleDetailTab = (t: DetailTab) => {
     if (!selectedEvent) return; setDetailTab(t)
     if (t === 'sessions') fetchSessions(selectedEvent.id)
     else if (t === 'legends') fetchLegends(selectedEvent.id)
-    else if (t === 'seatmaps') fetchSeatMaps(selectedEvent.id)
   }
 
   const formatDate = (d: string) => { try { return new Date(d).toLocaleDateString('vi-VN', { month: 'short', day: 'numeric', year: 'numeric' }) } catch { return d } }
   const statusColor = (s: string) => s === 'Published' ? 'bg-emerald-500/15 text-emerald-400' : s === 'Cancelled' ? 'bg-red-500/15 text-red-400' : s === 'Approved' ? 'bg-blue-500/15 text-blue-400' : s === 'Pending' ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-700/40 text-slate-400'
   const totalPages = Math.ceil(total / 12)
-  const detailTabs: { key: DetailTab; label: string }[] = [{ key: 'info', label: 'Info' }, { key: 'sessions', label: 'Sessions' }, { key: 'legends', label: 'Pricing Tiers' }, { key: 'seatmaps', label: 'Seat Maps' }]
+  const detailTabs: { key: DetailTab; label: string }[] = [{ key: 'info', label: 'Info' }, { key: 'sessions', label: 'Sessions' }, { key: 'legends', label: 'Pricing Tiers' }]
 
   return (
     <div className="fade-in space-y-6">
@@ -136,6 +124,12 @@ export function EventsPage() {
                           <p className="text-xs text-slate-500 mt-0.5">📅 {formatDate(s.startTime)} → {formatDate(s.endTime)}</p>
                           {s.chartName && <p className="text-xs text-indigo-400 mt-0.5">🗺 {s.chartName}</p>}
                         </div>
+                        <button
+                          className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
+                          onClick={() => navigate(`/sessions/${s.id}/book`)}
+                        >
+                          Book Seats
+                        </button>
                       </div>
                     ))}</div>
                   )}
@@ -158,68 +152,6 @@ export function EventsPage() {
                   )}
                 </>)}
 
-                {/* ── Seat Maps Tab ── */}
-                {detailTab === 'seatmaps' && (<>
-                  {loadingSeatMaps ? <div className="skeleton h-20 w-full" /> : seatMaps.length === 0 ? (
-                    <p className="text-sm text-slate-400">No seat maps for this event.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
-                      <div className="space-y-3">
-                        {seatMaps.map(sm => (
-                          <div key={sm.id} className={`rounded-xl border p-4 cursor-pointer transition-all hover:border-indigo-500/30 ${seatMapDetail?.id === sm.id ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-slate-700/30 bg-slate-900/40'}`}
-                            onClick={() => { handleViewSeatMapDetail(sm.id); handleViewSeatMapStats(sm.id) }}>
-                            <div className="flex items-center justify-between mb-1.5">
-                              <h4 className="font-semibold text-sm text-slate-200">{sm.name}</h4>
-                            </div>
-                            <div className="flex items-center justify-between text-xs text-slate-500">
-                              <span>{new Date(sm.createdAt).toLocaleDateString('vi-VN')}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {(seatMapDetail || loadingSeatMapDetail) && (
-                        <div className="space-y-4">
-                          {loadingSeatMapDetail ? <div className="rounded-xl border border-slate-700/30 bg-slate-900/40 p-5"><div className="skeleton h-4 w-3/4 mb-2" /><div className="skeleton h-3 w-1/2" /></div> : seatMapDetail && (<>
-                            <div className="rounded-xl border border-slate-700/30 bg-slate-900/40 p-5">
-                              <h3 className="mb-3 text-sm font-semibold">{seatMapDetail.name}</h3>
-                              {seatMapDetail.sections && seatMapDetail.sections.length > 0 && (
-                                <div className="space-y-2">
-                                  {seatMapDetail.sections.map(sec => (
-                                    <div key={sec.id} className="rounded-lg border border-slate-700/20 bg-slate-900/30 p-2.5">
-                                      <div className="flex justify-between text-sm"><strong className="text-slate-200">{sec.label}</strong><span className="text-slate-500 text-xs">{sec.sectionType}</span></div>
-                                      {sec.rows && sec.rows.length > 0 && <div className="mt-1.5 space-y-0.5">{sec.rows.map(row => <div key={row.id} className="text-xs text-slate-400">Row {row.label} — {row.seats?.length ?? 0} seats</div>)}</div>}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {loadingSeatMapStats ? <div className="rounded-xl border border-slate-700/30 bg-slate-900/40 p-5"><div className="skeleton h-4 w-3/4" /></div>
-                              : seatMapStats && (
-                                <div className="rounded-xl border border-slate-700/30 bg-slate-900/40 p-5">
-                                  <h3 className="mb-3 text-sm font-semibold">Availability</h3>
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                    {[
-                                      { label: 'Available', value: seatMapStats.availableSeats, color: 'text-emerald-400' },
-                                      { label: 'Reserved', value: seatMapStats.reservedSeats, color: 'text-yellow-400' },
-                                      { label: 'Sold', value: seatMapStats.soldSeats, color: 'text-red-400' },
-                                      { label: 'Total', value: seatMapStats.totalSeats, color: 'text-slate-200' },
-                                    ].map(s => (
-                                      <div key={s.label} className="rounded-lg border border-slate-700/30 bg-slate-900/30 p-2.5 text-center">
-                                        <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
-                                        <div className="text-[10px] text-slate-500 uppercase tracking-wider">{s.label}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                          </>)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>)}
               </div>
             </>)}
           </div>

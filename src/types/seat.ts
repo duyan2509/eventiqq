@@ -46,14 +46,38 @@ export interface SeatObjectResponse {
   zIndex: number
 }
 
+export interface SeatLayoutItemResponse {
+  id: string
+  seatNumber: number
+  position?: string
+}
+
+export interface SeatRowLayoutResponse {
+  id: string
+  label: string
+  seatSpacing?: number
+  seats: SeatLayoutItemResponse[]
+}
+
+export interface SeatSectionLayoutResponse {
+  id: string
+  label: string
+  sectionType?: string
+  geometry?: string
+  style?: string
+  rows: SeatRowLayoutResponse[]
+}
+
 export interface SeatMapDetailResponse extends SeatMapResponse {
   seats: SeatResponse[]
   objects: SeatObjectResponse[]
+  sections?: SeatSectionLayoutResponse[]
 }
 
 export interface SeatMapLayoutResponse extends SeatMapResponse {
   seats: SeatLayoutResponse[]
   objects: SeatObjectResponse[]
+  sections: SeatSectionLayoutResponse[]
 }
 
 export interface CreateSeatMapDto {
@@ -81,4 +105,7 @@ export interface SeatMapStatsResponse {
   holdingSeats: number
   soldSeats: number
   blockedSeats: number
+  reservedSeats: number
+  totalSections: number
+  totalRows: number
 }

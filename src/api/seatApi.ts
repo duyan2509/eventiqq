@@ -43,3 +43,20 @@ export async function holdSeats(seatMapId: string, seatIds: string[]): Promise<H
 export async function releaseSeats(seatMapId: string, seatIds: string[]): Promise<void> {
   await http.delete(`/seat-maps/${seatMapId}/seats/hold`, { data: { seatIds } })
 }
+
+export interface HoldStatusResponse {
+  heldUntil: string
+  seats: Array<{
+    id: string
+    label: string
+    seatNumber: number
+    legendId?: string
+  }>
+}
+
+export async function getHoldStatus(seatMapId: string, seatIds: string[]): Promise<HoldStatusResponse> {
+  const res = await http.get<HoldStatusResponse>(`/seat-maps/${seatMapId}/seats/hold`, {
+    params: { seatIds: seatIds.join(',') }
+  })
+  return res.data
+}

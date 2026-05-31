@@ -1,4 +1,4 @@
-import type { PaymentConnectResponse, PaymentStatusResponse, PlatformConfigResponse, UpdatePlatformConfigRequest } from '../types/index'
+import type { OrderResponse, PaymentConnectResponse, PaymentStatusResponse, PlatformConfigResponse, UpdatePlatformConfigRequest } from '../types/index'
 import { http } from './httpClient'
 
 export async function connectStripeAccount(orgId: string): Promise<PaymentConnectResponse> {
@@ -27,5 +27,15 @@ export async function getPlatformConfig(): Promise<PlatformConfigResponse> {
 
 export async function updatePlatformConfig(data: UpdatePlatformConfigRequest): Promise<PlatformConfigResponse> {
   const res = await http.put<PlatformConfigResponse>('/admin/platform-config', data)
+  return res.data
+}
+
+export async function createCheckout(sessionId: string, seatIds: string[]): Promise<{ checkoutUrl: string }> {
+  const res = await http.post<{ checkoutUrl: string }>('/payments/checkout', { sessionId, seatIds })
+  return res.data
+}
+
+export async function getMyOrders(): Promise<OrderResponse[]> {
+  const res = await http.get<OrderResponse[]>('/payments/orders')
   return res.data
 }

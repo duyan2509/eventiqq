@@ -10,6 +10,12 @@ import { InvitationsPage } from '../../pages/InvitationsPage'
 import { SeatDesignerPage } from '../../pages/SeatDesignerPage'
 import { SeatBookingPage } from '../../pages/SeatBookingPage'
 import { StripeReturnPage, StripeRefreshPage } from '../../pages/StripeCallbackPage'
+import { PaymentSuccessPage } from '../../pages/PaymentSuccessPage'
+import { PaymentCancelPage } from '../../pages/PaymentCancelPage'
+import { CheckoutPage } from '../../pages/CheckoutPage'
+import { MyTicketsPage } from '../../pages/MyTicketsPage'
+import { StaffScanPage } from '../../pages/StaffScanPage'
+import { EventCheckInPage } from '../../pages/EventCheckInPage'
 import { OrgWorkspacePage } from '../../pages/OrgWorkspacePage'
 import { AdminLayout } from '../admin/AdminLayout'
 import { AdminDashboardPage } from '../../pages/admin/AdminDashboardPage'
@@ -65,10 +71,24 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged, onSignOut }: A
       </Route>
 
       <Route path="/sessions/:sessionId/book" element={<AuthGuard user={user} message="Please sign in to book seats."><SeatBookingPage /></AuthGuard>} />
+      <Route path="/checkout" element={<AuthGuard user={user} message="Please sign in to checkout."><CheckoutPage /></AuthGuard>} />
       <Route path="/events/:eventId/seat-design" element={<AuthGuard user={user} message="Please sign in to use Seat Designer."><SeatDesignerPage user={user} /></AuthGuard>} />
       <Route path="/events/:eventId/seat-design/:seatMapId" element={<AuthGuard user={user} message="Please sign in to use Seat Designer."><SeatDesignerPage user={user} /></AuthGuard>} />
       <Route path="/organizations/:orgId/payment/return" element={<AuthGuard user={user} message="Please sign in to complete Stripe setup."><StripeReturnPage /></AuthGuard>} />
       <Route path="/organizations/:orgId/payment/refresh" element={<AuthGuard user={user} message="Please sign in to complete Stripe setup."><StripeRefreshPage /></AuthGuard>} />
+      <Route path="/payment/success" element={<AuthGuard user={user} message="Please sign in to view payment result."><PaymentSuccessPage /></AuthGuard>} />
+      <Route path="/payment/cancel" element={<PaymentCancelPage />} />
+      <Route path="/my-tickets" element={<AuthGuard user={user} message="Please sign in to view your tickets."><MyTicketsPage /></AuthGuard>} />
+      <Route path="/staff/scan" element={
+        user && (user.currentRole === 'Staff' || user.currentRole === 'Organization')
+          ? <StaffScanPage />
+          : <div className="glass p-8 text-center text-sm text-slate-400">Staff or Organization role required.</div>
+      } />
+      <Route path="/events/:eventId/checkin" element={
+        user && (user.currentRole === 'Staff' || user.currentRole === 'Organization')
+          ? <EventCheckInPage />
+          : <div className="glass p-8 text-center text-sm text-slate-400">Staff or Organization role required.</div>
+      } />
       <Route path="*" element={<Navigate to="/" replace state={{ from: location }} />} />
     </Routes>
   )

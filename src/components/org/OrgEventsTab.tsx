@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { EventQuickViewData, EventDetail } from '../../types/event'
 import type { Province } from '../../api/addressApi'
 import { getAllEvents, getEventDetail } from '../../api/eventApi'
@@ -22,6 +23,7 @@ const DETAIL_TABS: { key: DetailTab; label: string }[] = [
 ]
 
 export function OrgEventsTab({ orgId, canEdit, isDesigner, isOrg }: { orgId: string; canEdit: boolean; isDesigner?: boolean; isOrg?: boolean }) {
+  const navigate = useNavigate()
   const [events, setEvents] = useState<EventQuickViewData[]>([])
   const [loading, setLoading] = useState(true)
   const [total, setTotal] = useState(0)
@@ -79,7 +81,18 @@ export function OrgEventsTab({ orgId, canEdit, isDesigner, isOrg }: { orgId: str
                     <h2 className="text-xl font-bold text-white drop-shadow">{selectedEvent.name}</h2>
                     <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${statusColor(selectedEvent.status)}`}>{selectedEvent.status}</span>
                   </div>
-                  <button className="absolute right-4 top-4 rounded-full bg-black/40 p-1.5 text-white/70 hover:bg-black/60 hover:text-white" onClick={handleClose}>✕</button>
+                  <div className="absolute right-4 top-4 flex items-center gap-2">
+                    {selectedEvent.status === 'Approved' && (
+                      <button
+                        onClick={() => navigate(`/events/${selectedEvent.id}/checkin`)}
+                        className="rounded-full bg-indigo-500 px-3 py-1 text-[11px] font-semibold text-white hover:bg-indigo-400 transition-colors flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8.25V18a2.25 2.25 0 002.25 2.25h13.5A2.25 2.25 0 0021 18V8.25M3 8.25a2.25 2.25 0 012.25-2.25h13.5a2.25 2.25 0 012.25 2.25M3 8.25h18M9 12l2 2 4-4" /></svg>
+                        Check-in
+                      </button>
+                    )}
+                    <button className="rounded-full bg-black/40 p-1.5 text-white/70 hover:bg-black/60 hover:text-white" onClick={handleClose}>✕</button>
+                  </div>
                 </div>
 
                 <div className="p-6">

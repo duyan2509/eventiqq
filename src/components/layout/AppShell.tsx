@@ -10,6 +10,7 @@ type NavItem = { label: string; path: string; requiresAuth?: boolean; roles?: Ro
 const NAV_ITEMS: NavItem[] = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
+  { label: 'My Tickets', path: '/my-tickets', requiresAuth: true },
   { label: 'Organizations', path: '/organizations', requiresAuth: true },
   { label: 'Invitations', path: '/invitations', requiresAuth: true },
 ]
@@ -32,6 +33,7 @@ export function AppShell() {
   const isOrgWorkspace = /^\/organizations\/[^/]+/.test(currentPath)
   const isAdminRoute = currentPath.startsWith('/admin')
   const isSeatDesigner = /^\/events\/[^/]+\/seat-design/.test(currentPath)
+  const isSeatBooking = /^\/sessions\/[^/]+\/book/.test(currentPath) || currentPath === '/checkout'
 
   if (restoring) {
     return (
@@ -44,7 +46,7 @@ export function AppShell() {
     )
   }
 
-  if (isAdminRoute || isSeatDesigner) {
+  if (isAdminRoute || isSeatDesigner || isSeatBooking) {
     return (
       <AppRoutes
         user={user}

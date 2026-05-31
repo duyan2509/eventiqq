@@ -134,3 +134,37 @@ export interface UpdatePlatformConfigRequest {
   pendingFeeRate?: number
   payoutDayOfMonth?: number
 }
+
+export interface OrderItemResponse {
+  seatId: string
+  seatLabel: string
+  legendName: string
+  price: number
+}
+
+export interface OrderResponse {
+  id: string
+  sessionId: string
+  eventName: string
+  sessionName: string
+  sessionDate: string
+  status: string
+  totalAmount: number
+  platformFee: number
+  createdAt: string
+  paidAt?: string
+  items: OrderItemResponse[]
+}
+
+export interface TicketResponse {
+  id: string
+  orderId: string
+  sessionId: string
+  seatLabel: string
+  legendName: string
+  price: number
+  qrCode: string
+  isCheckedIn: boolean
+  checkedInAt?: string
+  issuedAt: string
+}

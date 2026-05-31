@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { getSeatMapBySession, holdSeats, releaseSeats } from '../api/seatApi'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { getSeatMapBySession, holdSeats } from '../api/seatApi'
+import { getLegends } from '../api/legendApi'
 import * as bookingHub from '../api/seatBookingHub'
-import type { SeatMapLayoutResponse, SeatSectionLayoutResponse, SeatLayoutItemResponse, SeatStatusUpdate } from '../types/seat'
+import type { SeatMapLayoutResponse, SeatLayoutResponse, SeatStatusUpdate } from '../types/seat'
+import type { LegendResponse } from '../types/index'
+import { fitToBoundingBox, bboxFromRects, bboxFromPoints, unionBbox } from '../utils/canvasFit'
 
 /* ===== Types ===== */
 interface Geometry { x: number; y: number; width: number; height: number; rotation?: number }
@@ -14,14 +17,12 @@ const SEAT_COLORS: Record<string, string> = {
   Available: '#4ade80',
   Holding: '#facc15',
   Sold: '#ef4444',
-  Blocked: '#6b7280',
 }
 const SELECTED_COLOR = '#818cf8'
 const SEAT_RADIUS = 8
 
 export function SeatBookingPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
-  const navigate = useNavigate()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const seatHitsRef = useRef<SeatHit[]>([])
@@ -33,19 +34,51 @@ export function SeatBookingPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [holding, setHolding] = useState(false)
-  const [heldUntil, setHeldUntil] = useState<Date | null>(null)
-  const [countdown, setCountdown] = useState('')
+  const [holdError, setHoldError] = useState<string | null>(null)
+  const [legends, setLegends] = useState<LegendResponse[]>([])
+  const legendMap = useMemo(() => {
+    const m = new Map<string, LegendResponse>()
+    legends.forEach(l => m.set(l.id, l))
+    return m
+  }, [legends])
+  const [connected, setConnected] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [tool, setTool] = useState<'select' | 'pan'>('select')
   const isPanning = useRef(false)
   const panStart = useRef({ x: 0, y: 0 })
+  const hasFittedRef = useRef(false)
+  const navigate = useNavigate()
+
+  /* Fit content to canvas viewport */
+  const fitToContent = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !layout) return
+    const objectsBbox = bboxFromRects(layout.objects ?? [], o => {
+      try { return o.geometry ? JSON.parse(o.geometry) : null } catch { return null }
+    })
+    const seatPoints = (layout.seats ?? [])
+      .filter(s => s.position)
+      .map(s => { try { return JSON.parse(s.position!) as SeatPos } catch { return null } })
+      .filter((p): p is SeatPos => p !== null)
+    const seatsBbox = bboxFromPoints(seatPoints, SEAT_RADIUS)
+    const bbox = unionBbox(objectsBbox, seatsBbox)
+    if (!bbox) return
+    const view = fitToBoundingBox(bbox, canvas.width, canvas.height, 60, 3)
+    setZoom(view.zoom)
+    setPan(view.pan)
+  }, [layout])
 
   /* Load layout */
   useEffect(() => {
     if (!sessionId) return
     setLoading(true)
     getSeatMapBySession(sessionId)
-      .then(data => { setLayout(data); setSeatMapId(data.id) })
+      .then(data => {
+        setLayout(data)
+        setSeatMapId(data.id)
+        getLegends(data.eventId, 1, 50).then(r => setLegends(r.data ?? [])).catch(() => {})
+      })
       .catch(() => setError('Failed to load seat map.'))
       .finally(() => setLoading(false))
   }, [sessionId])
@@ -53,40 +86,28 @@ export function SeatBookingPage() {
   /* Connect booking hub once seatMapId is known */
   useEffect(() => {
     if (!seatMapId) return
-    bookingHub.connectToBookingHub(seatMapId).then(conn => {
-      conn.on('InitialSeatStatuses', (updates: SeatStatusUpdate[]) => {
+    bookingHub.connectToBookingHub(seatMapId, {
+      onInitialStatuses: (updates: SeatStatusUpdate[]) => {
         setStatuses(() => {
           const m = new Map<string, SeatStatusUpdate>()
           updates.forEach(u => m.set(u.seatId, u))
           return m
         })
-      })
-      conn.on('SeatsStatusChanged', (updates: SeatStatusUpdate[]) => {
+      },
+      onStatusChanged: (updates: SeatStatusUpdate[]) => {
         setStatuses(prev => {
           const m = new Map(prev)
           updates.forEach(u => m.set(u.seatId, u))
           return m
         })
-      })
-    }).catch(() => setError('Real-time connection failed.'))
+      },
+      onClose: () => setConnected(false),
+    })
+      .then(() => setConnected(true))
+      .catch(() => setError('Real-time connection failed.'))
 
     return () => { bookingHub.disconnectFromBookingHub(seatMapId) }
   }, [seatMapId])
-
-  /* Countdown timer */
-  useEffect(() => {
-    if (!heldUntil) return
-    const tick = () => {
-      const diff = heldUntil.getTime() - Date.now()
-      if (diff <= 0) { setCountdown('Expired'); setHeldUntil(null); return }
-      const m = Math.floor(diff / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setCountdown(`${m}:${s.toString().padStart(2, '0')}`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [heldUntil])
 
   /* Canvas draw */
   const draw = useCallback(() => {
@@ -107,7 +128,7 @@ export function SeatBookingPage() {
     for (let y = 0; y < h * 2; y += 40) { ctx.beginPath(); ctx.moveTo(-w, y); ctx.lineTo(w * 2, y); ctx.stroke() }
 
     // Objects
-    layout.objects.forEach(obj => {
+    ;(layout.objects ?? []).forEach(obj => {
       const geo: Geometry = obj.geometry ? JSON.parse(obj.geometry) : { x: 50, y: 50, width: 200, height: 80 }
       ctx.save()
       ctx.translate(geo.x + geo.width / 2, geo.y + geo.height / 2)
@@ -125,67 +146,81 @@ export function SeatBookingPage() {
       ctx.restore()
     })
 
-    // Sections + seats
-    const hits: SeatHit[] = []
-    layout.sections.forEach((section: SeatSectionLayoutResponse) => {
-      const geo: Geometry = section.geometry ? JSON.parse(section.geometry) : { x: 100, y: 150, width: 300, height: 200 }
-      const style: Style = section.style ? JSON.parse(section.style) : { fill: 'rgba(99,102,241,0.08)', stroke: 'rgba(99,102,241,0.3)' }
-      ctx.save()
-      ctx.fillStyle = style.fill; ctx.strokeStyle = style.stroke; ctx.lineWidth = 1; ctx.setLineDash([4, 4])
-      const r = 8; ctx.beginPath(); ctx.moveTo(geo.x + r, geo.y); ctx.lineTo(geo.x + geo.width - r, geo.y); ctx.quadraticCurveTo(geo.x + geo.width, geo.y, geo.x + geo.width, geo.y + r); ctx.lineTo(geo.x + geo.width, geo.y + geo.height - r); ctx.quadraticCurveTo(geo.x + geo.width, geo.y + geo.height, geo.x + geo.width - r, geo.y + geo.height); ctx.lineTo(geo.x + r, geo.y + geo.height); ctx.quadraticCurveTo(geo.x, geo.y + geo.height, geo.x, geo.y + geo.height - r); ctx.lineTo(geo.x, geo.y + r); ctx.quadraticCurveTo(geo.x, geo.y, geo.x + r, geo.y); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([])
-      ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 13px Inter,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(section.label, geo.x + 8, geo.y + 6)
+    // Seats (flat list with absolute position)
+    const hits: SeatHit[] = [];
+    (layout.seats ?? []).forEach((seat: SeatLayoutResponse) => {
+      if (!seat.position) return
+      let pos: SeatPos
+      try { pos = JSON.parse(seat.position) } catch { return }
+      const cx = pos.x + SEAT_RADIUS
+      const cy = pos.y + SEAT_RADIUS
 
-      section.rows.forEach((row, ri) => {
-        const rowY = geo.y + 30 + ri * 28
-        ctx.fillStyle = '#94a3b8'; ctx.font = '10px Inter,sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(row.label, geo.x + 28, rowY + SEAT_RADIUS)
+      const status = statuses.get(seat.id)?.status ?? 'Available'
+      const isSelected = selected.has(seat.id)
+      const statusColor = SEAT_COLORS[status] ?? SEAT_COLORS.Available
+      const legendColor = seat.legendId ? (legendMap.get(seat.legendId)?.color ?? '#64748b') : '#64748b'
 
-        row.seats.forEach((seat: SeatLayoutItemResponse, si) => {
-          let cx: number, cy: number
-          if (seat.position) { const p: SeatPos = JSON.parse(seat.position); cx = geo.x + 35 + p.x + SEAT_RADIUS; cy = geo.y + 30 + p.y + SEAT_RADIUS }
-          else { cx = geo.x + 35 + si * (row.seatSpacing || 24) + SEAT_RADIUS; cy = rowY + SEAT_RADIUS }
+      // Fill: selected color or status color (semi-transparent for non-selected)
+      ctx.beginPath()
+      ctx.arc(cx, cy, SEAT_RADIUS - 1, 0, Math.PI * 2)
+      ctx.fillStyle = isSelected ? SELECTED_COLOR : statusColor
+      ctx.fill()
 
-          const status = statuses.get(seat.id)?.status ?? 'Available'
-          const isSelected = selected.has(seat.id)
-          const color = isSelected ? SELECTED_COLOR : (SEAT_COLORS[status] ?? SEAT_COLORS.Available)
+      // Border: legend color (thicker if selected)
+      ctx.strokeStyle = isSelected ? '#a5b4fc' : legendColor
+      ctx.lineWidth = isSelected ? 2 : 1.5
+      ctx.stroke()
 
-          ctx.fillStyle = color
-          ctx.beginPath(); ctx.arc(cx, cy, SEAT_RADIUS - 1, 0, Math.PI * 2); ctx.fill()
+      // Seat number label
+      ctx.fillStyle = '#0f172a'
+      ctx.font = 'bold 7px Inter,sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(seat.seatNumber), cx, cy)
 
-          if (isSelected) { ctx.strokeStyle = '#a5b4fc'; ctx.lineWidth = 1.5; ctx.stroke() }
-
-          ctx.fillStyle = '#0f172a'; ctx.font = 'bold 7px Inter,sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(seat.seatNumber), cx, cy)
-
-          hits.push({ id: seat.id, cx, cy, r: SEAT_RADIUS })
-        })
-      })
-      ctx.restore()
+      hits.push({ id: seat.id, cx, cy, r: SEAT_RADIUS })
     })
     seatHitsRef.current = hits
     ctx.restore()
-  }, [layout, statuses, selected, pan, zoom])
+  }, [layout, statuses, selected, pan, zoom, legendMap])
 
   useEffect(() => { draw() }, [draw])
+
+  /* Keep canvas sized to its container; fit once when layout is ready */
   useEffect(() => {
-    const c = canvasRef.current; if (!c) return
-    const ro = new ResizeObserver(() => { c.width = c.clientWidth; c.height = c.clientHeight; draw() })
-    ro.observe(c); return () => ro.disconnect()
-  }, [draw])
+    const c = canvasRef.current
+    if (!c) return
+    const sync = () => {
+      c.width = c.clientWidth
+      c.height = c.clientHeight
+      if (layout && !hasFittedRef.current && c.width > 0 && c.height > 0) {
+        fitToContent()
+        hasFittedRef.current = true
+      }
+      draw()
+    }
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(c)
+    return () => ro.disconnect()
+  }, [draw, layout, fitToContent])
 
   /* Canvas interactions */
-  const handleWheel = (e: React.WheelEvent) => { e.preventDefault(); setZoom(z => Math.max(0.3, Math.min(3, z * (e.deltaY > 0 ? 0.9 : 1.1)))) }
-
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) { isPanning.current = true; panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y } }
+    if (tool !== 'pan' || e.button !== 0) return
+    isPanning.current = true
+    panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
   }
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning.current) setPan({ x: e.clientX - panStart.current.x, y: e.clientY - panStart.current.y })
+    if (!isPanning.current) return
+    setPan({ x: e.clientX - panStart.current.x, y: e.clientY - panStart.current.y })
   }
 
   const handleMouseUp = () => { isPanning.current = false }
 
   const handleClick = (e: React.MouseEvent) => {
-    if (isPanning.current) return
+    if (tool !== 'select') return
     const canvas = canvasRef.current; if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const mx = (e.clientX - rect.left - pan.x) / zoom
@@ -206,135 +241,185 @@ export function SeatBookingPage() {
     }
   }
 
-  /* Hold / release */
-  const handleHold = async () => {
-    if (!seatMapId || selected.size === 0) return
+  const handleGoToCheckout = async () => {
+    if (!layout || !seatMapId || selected.size === 0) return
     setHolding(true)
+    setHoldError(null)
     try {
-      const res = await holdSeats(seatMapId, [...selected])
-      setHeldUntil(new Date(res.heldUntil))
-      setSelected(new Set())
+      const seatIds = [...selected]
+      await holdSeats(seatMapId, seatIds)
+      const params = new URLSearchParams({
+        sessionId: sessionId!,
+        seatMapId,
+        seatIds: seatIds.join(','),
+      })
+      navigate(`/checkout?${params}`)
     } catch (err: any) {
-      alert(err?.response?.data?.error ?? 'Failed to hold seats.')
+      const msg = err?.response?.data?.error ?? 'Failed to reserve seats. They may already be taken.'
+      setHoldError(msg)
+      setSelected(new Set())
     } finally {
       setHolding(false)
     }
   }
 
-  const handleRelease = async () => {
-    if (!seatMapId) return
-    const heldIds = [...statuses.entries()]
-      .filter(([, v]) => v.status === 'Holding')
-      .map(([id]) => id)
-    if (heldIds.length === 0) return
-    try {
-      await releaseSeats(seatMapId, heldIds)
-      setHeldUntil(null)
-      setCountdown('')
-    } catch { }
-  }
-
-  const heldSeats = [...statuses.entries()].filter(([, v]) => v.status === 'Holding')
-
-  if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">Loading seat map…</div>
-  if (error) return <div className="flex items-center justify-center h-64 text-red-400">{error}</div>
+  if (loading) return <div className="flex h-screen items-center justify-center text-slate-400">Loading seat map…</div>
+  if (error) return <div className="flex h-screen items-center justify-center text-red-400">{error}</div>
   if (!layout) return null
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-0 overflow-hidden">
+    <div className="flex flex-col" style={{ height: '100vh' }}>
 
-      {/* Canvas */}
-      <div className="relative flex-1">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full cursor-crosshair"
-          onWheel={handleWheel}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onClick={handleClick}
-        />
-        {/* Zoom controls */}
-        <div className="absolute bottom-4 left-4 flex gap-1">
-          <button className="glass px-2 py-1 text-xs text-slate-300 hover:text-white" onClick={() => setZoom(z => Math.min(3, z * 1.2))}>+</button>
-          <button className="glass px-2 py-1 text-xs text-slate-300 hover:text-white" onClick={() => setZoom(z => Math.max(0.3, z * 0.8))}>−</button>
-          <button className="glass px-2 py-1 text-xs text-slate-300 hover:text-white" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Reset</button>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 border-b border-slate-800/60 bg-slate-950/90 px-4 py-2 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/events')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← Events</button>
+          <div className="h-4 w-px bg-slate-700" />
+          <h2 className="text-sm font-bold truncate max-w-xs">{layout.name}</h2>
+          <div className="flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_4px_rgba(74,222,128,0.5)]' : 'bg-slate-600'}`} />
+            <span className="text-[10px] text-slate-500">{connected ? 'Live' : 'Connecting…'}</span>
+          </div>
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div className="w-72 glass border-l border-white/5 flex flex-col p-4 gap-4 overflow-y-auto">
-        <div>
-          <Link to="/events" className="text-xs text-slate-500 hover:text-slate-300">← Back to events</Link>
-          <h2 className="mt-1 text-sm font-semibold">{layout.name}</h2>
-          <p className="text-xs text-slate-400">{layout.totalSeats} total seats</p>
-        </div>
+      {/* Body */}
+      <div className="grid flex-1 overflow-hidden" style={{ gridTemplateColumns: '1fr 250px' }}>
 
-        {/* Legend */}
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Legend</p>
-          {Object.entries(SEAT_COLORS).map(([status, color]) => (
-            <div key={status} className="flex items-center gap-2 text-xs text-slate-300">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ background: color }} />
-              {status}
-            </div>
-          ))}
-          <div className="flex items-center gap-2 text-xs text-slate-300">
-            <span className="inline-block w-3 h-3 rounded-full" style={{ background: SELECTED_COLOR }} />
-            Selected
+        {/* Canvas */}
+        <div className="relative overflow-hidden bg-slate-100">
+          <canvas
+            ref={canvasRef}
+            className="block h-full w-full"
+            style={{ cursor: tool === 'pan' ? (isPanning.current ? 'grabbing' : 'grab') : 'default' }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onClick={handleClick}
+          />
+
+          {/* Floating toolbar — Figma-style */}
+          <div className="pointer-events-auto absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-0.5 rounded-xl border border-slate-700/60 bg-slate-900/90 px-1.5 py-1.5 shadow-xl backdrop-blur-md">
+            {([
+              ['select', '↖', 'Select seats'],
+              ['pan', '✋', 'Pan map'],
+            ] as const).map(([key, icon, hint]) => (
+              <button
+                key={key}
+                title={hint}
+                onClick={() => setTool(key)}
+                className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition-colors ${tool === key ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-200'}`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+
+          {/* Hint */}
+          <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-900/80 px-4 py-1.5 text-[11px] text-slate-300 backdrop-blur-sm">
+            {tool === 'pan'
+              ? 'Drag to pan the map'
+              : selected.size > 0
+              ? `${selected.size} seat${selected.size > 1 ? 's' : ''} selected — click "Go to Checkout"`
+              : 'Click an available seat to select it'}
           </div>
         </div>
 
-        {/* Selection */}
-        {selected.size > 0 && (
-          <div className="glass p-3 space-y-2">
-            <p className="text-xs font-medium text-slate-300">{selected.size} seat{selected.size > 1 ? 's' : ''} selected</p>
-            <button
-              className="w-full rounded-lg bg-indigo-500 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
-              onClick={handleHold}
-              disabled={holding}
-            >
-              {holding ? 'Holding…' : 'Hold Seats (10 min)'}
-            </button>
-            <button
-              className="w-full rounded-lg border border-slate-600 py-1.5 text-xs text-slate-400 hover:text-slate-200"
-              onClick={() => setSelected(new Set())}
-            >
-              Clear selection
-            </button>
-          </div>
-        )}
+        {/* Right panel */}
+        <div className="overflow-y-auto border-l border-slate-800/60 bg-slate-950/80 p-4 space-y-5">
 
-        {/* Held seats */}
-        {heldSeats.length > 0 && (
-          <div className="glass p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-slate-300">{heldSeats.length} seat{heldSeats.length > 1 ? 's' : ''} held</p>
-              {countdown && (
-                <span className={`text-xs font-mono font-semibold ${countdown === 'Expired' ? 'text-red-400' : 'text-yellow-400'}`}>
-                  {countdown}
+          {/* Stats */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Seat Map</p>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between rounded-lg bg-slate-900/40 px-3 py-1.5">
+                <span className="text-slate-500">Total seats</span>
+                <span className="font-semibold text-slate-200">{layout.totalSeats}</span>
+              </div>
+              <div className="flex justify-between rounded-lg bg-slate-900/40 px-3 py-1.5">
+                <span className="text-slate-500">Available</span>
+                <span className="font-semibold text-emerald-400">
+                  {[...statuses.values()].filter(s => s.status === 'Available').length || layout.totalSeats}
                 </span>
-              )}
+              </div>
             </div>
-            <button
-              className="w-full rounded-lg bg-emerald-500 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
-              onClick={() => navigate(`/sessions/${sessionId}/checkout`)}
-            >
-              Proceed to Checkout
-            </button>
-            <button
-              className="w-full rounded-lg border border-slate-600 py-1.5 text-xs text-slate-400 hover:text-red-400"
-              onClick={handleRelease}
-            >
-              Release seats
-            </button>
           </div>
-        )}
 
-        {/* Tip */}
-        {selected.size === 0 && heldSeats.length === 0 && (
-          <p className="text-xs text-slate-500">Click available seats to select them, then hold to reserve for 10 minutes.</p>
-        )}
+          {/* Legends (price tiers) */}
+          {legends.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Price Tiers</p>
+              <div className="space-y-1.5">
+                {legends.map(l => (
+                  <div key={l.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-900/40 text-xs">
+                    <span className="flex items-center gap-2 text-slate-300 truncate mr-2">
+                      <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: l.color || '#64748b' }} />
+                      {l.name}
+                    </span>
+                    <span className="text-slate-200 font-semibold tabular-nums">${l.price}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Status colors */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Status</p>
+            <div className="space-y-1.5">
+              {Object.entries(SEAT_COLORS).map(([s, c]) => (
+                <div key={s} className="flex items-center gap-2.5 text-xs text-slate-400">
+                  <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ background: c }} />
+                  {s}
+                </div>
+              ))}
+              <div className="flex items-center gap-2.5 text-xs text-slate-400">
+                <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ background: SELECTED_COLOR }} />
+                Selected
+              </div>
+            </div>
+          </div>
+
+          {/* Hold error — persists after selection is cleared */}
+          {holdError && (
+            <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-3 py-2 text-[11px] text-red-400 flex items-start justify-between gap-2">
+              <span>{holdError}</span>
+              <button
+                onClick={() => setHoldError(null)}
+                className="text-red-400/60 hover:text-red-300 flex-shrink-0"
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Actions */}
+          {selected.size > 0 ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                {selected.size} Seat{selected.size > 1 ? 's' : ''} Selected
+              </p>
+              <button
+                className="w-full rounded-lg bg-indigo-500 py-2 text-xs font-semibold text-white hover:bg-indigo-400 disabled:opacity-50 transition-colors"
+                onClick={handleGoToCheckout}
+                disabled={holding}
+              >
+                {holding ? 'Reserving…' : 'Go to Checkout →'}
+              </button>
+              <button
+                className="w-full rounded-lg border border-slate-700 py-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                onClick={() => { setSelected(new Set()); setHoldError(null) }}
+                disabled={holding}
+              >
+                Clear Selection
+              </button>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-600">Click an available seat to select it.</p>
+          )}
+        </div>
       </div>
     </div>
   )

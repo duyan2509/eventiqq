@@ -11,6 +11,7 @@ import type { LegendResponse } from '../types/index'
 import * as hub from '../api/seatDesignHub'
 import { getCharts } from '../api/chartApi'
 import type { ChartResponse } from '../types/index'
+import { fitToBoundingBox, bboxFromPoints } from '../utils/canvasFit'
 
 /* ===== Local types ===== */
 interface FlatSeat {
@@ -54,6 +55,8 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const [showCreateMap, setShowCreateMap] = useState(false)
   const [newMapName, setNewMapName] = useState('')
   const [newMapChartId, setNewMapChartId] = useState('')
+  const [loadingCharts, setLoadingCharts] = useState(false)
+  const [charts, setCharts] = useState<ChartResponse[]>([])
 
   useEffect(() => {
     if (!eventId || seatMapId) return
@@ -204,6 +207,7 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
   /* Canvas view */
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const hasFittedRef = useRef(false)
 
   /* Data */
   const [seatMapName, setSeatMapName] = useState('')
@@ -450,12 +454,40 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
     ctx.restore()
   }, [seats, legendColorMap, pan, zoom, selectedIds, rubberBand, seatDrawPreview, liveMoveOffset, cursors, onlineUsers])
 
+  const fitToContent = useCallback(() => {
+    const c = canvasRef.current
+    if (!c) return
+    if (seats.length === 0) {
+      setZoom(1)
+      setPan({ x: c.width / 2 - 400, y: c.height / 2 - 300 })
+      return
+    }
+    const bbox = bboxFromPoints(seats, SEAT_RADIUS + 4)
+    if (!bbox) return
+    const view = fitToBoundingBox(bbox, c.width, c.height, 80, 1.5)
+    setZoom(view.zoom)
+    setPan(view.pan)
+  }, [seats])
+
   useEffect(() => { draw() }, [draw])
   useEffect(() => {
     const c = canvasRef.current; if (!c) return
-    const ro = new ResizeObserver(() => { c.width = c.clientWidth; c.height = c.clientHeight; draw() })
+    const ro = new ResizeObserver(() => {
+      c.width = c.clientWidth; c.height = c.clientHeight
+      if (!hasFittedRef.current && !loading) { fitToContent(); hasFittedRef.current = true }
+      draw()
+    })
     ro.observe(c); return () => ro.disconnect()
-  }, [draw])
+  }, [draw, loading, fitToContent])
+
+  /* Auto-fit when seats first become available */
+  useEffect(() => {
+    if (loading || hasFittedRef.current) return
+    const c = canvasRef.current
+    if (!c || c.width === 0 || c.height === 0) return
+    fitToContent()
+    hasFittedRef.current = true
+  }, [loading, seats, fitToContent])
 
   /* ===== Coordinate helpers ===== */
   const toCanvas = (e: React.MouseEvent) => {
@@ -709,7 +741,6 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
   const selSeatType = selectedSeats.length > 0 ? selectedSeats[0].seatType : null
   const uniformType = selectedSeats.every(s => s.seatType === selSeatType) ? selSeatType : null
 
-  const typeStats = [1, 2, 3, 4].reduce((acc, t) => ({ ...acc, [t]: seats.filter(s => s.seatType === t).length }), {} as Record<number, number>)
   const legendStats = legends.map(l => ({ legend: l, count: seats.filter(s => s.legendId === l.id).length }))
   const noLegendCount = seats.filter(s => !s.legendId).length
 
@@ -743,7 +774,7 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
           <span className="text-[10px] text-slate-500">{Math.round(zoom * 100)}%</span>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.min(4, z * 1.2))}>+</button>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.max(0.2, z * 0.8))}>−</button>
-          <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Fit</button>
+          <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={fitToContent}>Fit</button>
           {readOnly
             ? <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400">View Only</span>
             : (<>
