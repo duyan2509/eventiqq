@@ -61,6 +61,15 @@ export async function forgotPassword(email: string): Promise<{ message: string }
   return res.data
 }
 
+export async function verifyResetToken(token: string): Promise<boolean> {
+  try {
+    await http.get('/auth/verify-reset-token', { params: { token } })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function resetPassword(token: string, newPassword: string): Promise<boolean> {
   const res = await http.post<boolean>('/auth/reset-password', { token, newPassword })
   return res.data

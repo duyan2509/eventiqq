@@ -25,10 +25,14 @@ export function AdminUsersPage() {
     }
   }
 
-  useEffect(() => { fetchUsers(page, searchEmail) }, [page])
+  const [submittedQuery, setSubmittedQuery] = useState('')
+
+  useEffect(() => { fetchUsers(page, submittedQuery) }, [page, submittedQuery])
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault(); setPage(1); fetchUsers(1, searchEmail)
+    e.preventDefault()
+    setSubmittedQuery(searchEmail)
+    setPage(1)
   }
 
   const handleBan = async () => {
@@ -36,7 +40,7 @@ export function AdminUsersPage() {
     const dto: BanUserRequest = { banReason: banReason || undefined }
     try {
       await banUser(banModal.userId, dto)
-      setBanModal(null); setBanReason(''); fetchUsers(page, searchEmail)
+      setBanModal(null); setBanReason(''); fetchUsers(page, submittedQuery)
     } catch (e: unknown) {
       const err = e as { response?: { data?: { Message?: string; message?: string } } }
       setError(err?.response?.data?.Message || err?.response?.data?.message || 'Failed to ban user.')
@@ -46,7 +50,7 @@ export function AdminUsersPage() {
   const handleUnban = async (userId: string) => {
     try {
       await unbanUser(userId, {})
-      fetchUsers(page, searchEmail)
+      fetchUsers(page, submittedQuery)
     } catch (e: unknown) {
       const err = e as { response?: { data?: { Message?: string; message?: string } } }
       setError(err?.response?.data?.Message || err?.response?.data?.message || 'Failed to unban user.')

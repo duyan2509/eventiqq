@@ -16,6 +16,7 @@ import { CheckoutPage } from '../../pages/CheckoutPage'
 import { MyTicketsPage } from '../../pages/MyTicketsPage'
 import { StaffScanPage } from '../../pages/StaffScanPage'
 import { EventCheckInPage } from '../../pages/EventCheckInPage'
+// OrgAnalyticsTab is used inside OrgWorkspacePage directly
 import { OrgWorkspacePage } from '../../pages/OrgWorkspacePage'
 import { AdminLayout } from '../admin/AdminLayout'
 import { AdminDashboardPage } from '../../pages/admin/AdminDashboardPage'
