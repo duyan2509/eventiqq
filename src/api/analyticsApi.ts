@@ -56,3 +56,20 @@ export async function getOrgAnalytics(orgId: string): Promise<OrgAnalyticsOvervi
   const res = await http.get<OrgAnalyticsOverview>(`/analytics/org/${orgId}`)
   return res.data
 }
+
+export interface Text2SqlResponse {
+  question: string
+  sql: string
+  rows: Record<string, unknown>[]
+  columns: string[]
+  chartType: string
+  relevantTables: string[]
+  method: string
+  retries: number
+  error: string | null
+}
+
+export async function askAnalytics(question: string): Promise<Text2SqlResponse> {
+  const res = await http.post<Text2SqlResponse>('/analytics/query', { question })
+  return res.data
+}
