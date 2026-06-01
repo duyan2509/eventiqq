@@ -111,13 +111,13 @@ export function EventCheckInPage() {
               {preview && <img src={preview} alt="" className="h-14 w-14 rounded-lg object-cover bg-white p-1 flex-shrink-0" />}
             </div>
             {status === 'decoding' && <p className="text-xs text-slate-500">Decoding…</p>}
-            {token && status === 'idle' && (
+            {token && (status === 'idle' || status === 'checking') && (
               <button
                 onClick={handleCheckIn}
                 disabled={status === 'checking'}
                 className="w-full rounded-xl bg-indigo-500 py-2.5 text-sm font-bold text-white hover:bg-indigo-400 disabled:opacity-40 transition-colors"
               >
-                Check In
+                {status === 'checking' ? 'Checking…' : 'Check In'}
               </button>
             )}
           </div>

@@ -1,4 +1,4 @@
-import type { SeatMapResponse, SeatMapDetailResponse, SeatMapLayoutResponse, HoldSeatsResponse, CreateSeatMapDto, SeatMapStatsResponse } from '../types/seat'
+import type { SeatMapResponse, SeatMapMetaResponse, SeatResponse, SeatLayoutChunkResponse, HoldSeatsResponse, CreateSeatMapDto, SeatMapStatsResponse, Bbox } from '../types/seat'
 import { http } from './httpClient'
 
 export async function getSeatMapsByEvent(eventId: string): Promise<SeatMapResponse[]> {
@@ -6,8 +6,15 @@ export async function getSeatMapsByEvent(eventId: string): Promise<SeatMapRespon
   return res.data
 }
 
-export async function getSeatMapById(id: string): Promise<SeatMapDetailResponse> {
-  const res = await http.get<SeatMapDetailResponse>(`/seat-maps/${id}`)
+// Design: seat map metadata (objects + bounds, no seats).
+export async function getSeatMapById(id: string): Promise<SeatMapMetaResponse> {
+  const res = await http.get<SeatMapMetaResponse>(`/seat-maps/${id}`)
+  return res.data
+}
+
+// Design: all seats for a seat map (loaded in one call by the editor).
+export async function getSeatMapSeats(id: string): Promise<SeatResponse[]> {
+  const res = await http.get<SeatResponse[]>(`/seat-maps/${id}/seats`)
   return res.data
 }
 
@@ -30,8 +37,16 @@ export async function publishSeatMap(id: string): Promise<SeatMapResponse> {
   return res.data
 }
 
-export async function getSeatMapBySession(sessionId: string): Promise<SeatMapLayoutResponse> {
-  const res = await http.get<SeatMapLayoutResponse>(`/seat-maps/sessions/${sessionId}`)
+// Booking: layout metadata (objects + full bounding box + total seats).
+export async function getSessionMeta(sessionId: string): Promise<SeatMapMetaResponse> {
+  const res = await http.get<SeatMapMetaResponse>(`/seat-maps/sessions/${sessionId}/meta`)
+  return res.data
+}
+
+// Booking: a viewport chunk of seats. Omit bbox to fetch all seats (zoom-out / small maps).
+export async function getSessionSeats(sessionId: string, bbox?: Bbox): Promise<SeatLayoutChunkResponse> {
+  const params = bbox ? { x1: bbox.x1, y1: bbox.y1, x2: bbox.x2, y2: bbox.y2 } : undefined
+  const res = await http.get<SeatLayoutChunkResponse>(`/seat-maps/sessions/${sessionId}/seats`, { params })
   return res.data
 }
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { SeatMapResponse, SeatMapDetailResponse, SeatMapStatsResponse } from '../types/seat'
+import type { SeatMapResponse, SeatMapMetaResponse, SeatMapStatsResponse } from '../types/seat'
 import { getSeatMapsByEvent, getSeatMapById, getSeatMapStats } from '../api/seatApi'
 
 export function SeatMapsPage() {
@@ -10,7 +10,7 @@ export function SeatMapsPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searched, setSearched] = useState(false)
-  const [detail, setDetail] = useState<SeatMapDetailResponse | null>(null)
+  const [detail, setDetail] = useState<SeatMapMetaResponse | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [stats, setStats] = useState<SeatMapStatsResponse | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)

@@ -1,6 +1,6 @@
 import { HubConnectionBuilder, HubConnection, LogLevel } from '@microsoft/signalr'
 import { getAccessToken } from '../store/authStore'
-import type { SeatStatusUpdate } from '../types/seat'
+import type { SeatStatusUpdate, Bbox } from '../types/seat'
 
 const SEAT_BASE = import.meta.env.VITE_SEAT_HUB_BASE_URL || 'http://localhost:5234'
 const HUB_URL = `${SEAT_BASE}/hubs/seat-booking`
@@ -18,8 +18,9 @@ export interface BookingHubHandlers {
 }
 
 /**
- * Register handlers BEFORE invoking JoinSeatMap, otherwise the server's
- * InitialSeatStatuses message (sent inline from JoinSeatMap) is dropped.
+ * Connect and join the live-update group. Statuses are no longer pushed on join —
+ * the caller requests them per viewport via getRegionStatuses; the server replies
+ * with an InitialSeatStatuses message, so register handlers before requesting.
  */
 export async function connectToBookingHub(
   seatMapId: string,
@@ -45,6 +46,15 @@ export async function connectToBookingHub(
   await connection.invoke('JoinSeatMap', seatMapId)
 
   return connection
+}
+
+/**
+ * Request current statuses for seats within a viewport region. The server replies
+ * via the InitialSeatStatuses handler. Omit `bbox` to request statuses for all seats.
+ */
+export async function getRegionStatuses(seatMapId: string, bbox?: Bbox): Promise<void> {
+  if (!connection) return
+  await connection.invoke('GetRegionStatuses', seatMapId, bbox ?? null)
 }
 
 export async function disconnectFromBookingHub(seatMapId: string): Promise<void> {

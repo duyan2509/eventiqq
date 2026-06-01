@@ -84,6 +84,33 @@ export function bboxFromPoints(
   return { minX: minX - radius, minY: minY - radius, maxX: maxX + radius, maxY: maxY + radius }
 }
 
+/**
+ * World-space bounding box currently visible in the canvas, given pan/zoom.
+ * `margin` (0..1) pads the box by a fraction of its size so seats just outside
+ * the viewport are prefetched — smoother panning. Default 0.2 = 20% on each side.
+ */
+export function viewportWorldBbox(
+  canvasWidth: number,
+  canvasHeight: number,
+  pan: { x: number; y: number },
+  zoom: number,
+  margin = 0.2,
+): BoundingBox {
+  const minX = -pan.x / zoom
+  const minY = -pan.y / zoom
+  const maxX = (canvasWidth - pan.x) / zoom
+  const maxY = (canvasHeight - pan.y) / zoom
+  const padX = (maxX - minX) * margin
+  const padY = (maxY - minY) * margin
+  return { minX: minX - padX, minY: minY - padY, maxX: maxX + padX, maxY: maxY + padY }
+}
+
+/** True when bbox `inner` lies entirely within `outer`. */
+export function bboxContains(outer: BoundingBox, inner: BoundingBox): boolean {
+  return inner.minX >= outer.minX && inner.minY >= outer.minY
+    && inner.maxX <= outer.maxX && inner.maxY <= outer.maxY
+}
+
 /** Merge two bounding boxes; either may be null. */
 export function unionBbox(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
   if (!a) return b

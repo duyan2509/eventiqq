@@ -4,7 +4,7 @@ import { getHoldStatus, releaseSeats } from '../api/seatApi'
 import { createCheckout } from '../api/paymentApi'
 import { getLegends } from '../api/legendApi'
 import type { LegendResponse } from '../types/index'
-import { getSeatMapBySession } from '../api/seatApi'
+import { getSessionMeta } from '../api/seatApi'
 
 interface HeldSeat {
   id: string
@@ -42,8 +42,8 @@ export function CheckoutPage() {
         setHeldUntil(new Date(status.heldUntil))
 
         // 2) Fetch legends to compute prices/colors
-        const layout = await getSeatMapBySession(sessionId)
-        const legendsRes = await getLegends(layout.eventId, 1, 50)
+        const meta = await getSessionMeta(sessionId)
+        const legendsRes = await getLegends(meta.eventId, 1, 50)
         setLegends(legendsRes.data ?? [])
 
         setPageState('success')

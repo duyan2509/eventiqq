@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import type { UserInfo } from '../types/auth'
 import { getMyMembership } from '../api/memberApi'
-import { getSeatMapById, getSeatMapsByEvent, createSeatMap } from '../api/seatApi'
+import { getSeatMapById, getSeatMapSeats, getSeatMapsByEvent, createSeatMap } from '../api/seatApi'
 import type { SeatMapResponse } from '../types/seat'
 import { getVersions, saveVersion, restoreVersion } from '../api/seatVersionApi'
 import type { SeatMapVersionResponse } from '../api/seatVersionApi'
@@ -274,9 +274,10 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
     if (!seatMapId) return
     setLoading(true)
     try {
-      const d = await getSeatMapById(seatMapId)
-      setSeatMapName(d.name)
-      const flat: FlatSeat[] = (d.seats || []).map((seat: any) => {
+      // Metadata (name) and the full seat list come from separate endpoints now.
+      const [meta, seatList] = await Promise.all([getSeatMapById(seatMapId), getSeatMapSeats(seatMapId)])
+      setSeatMapName(meta.name)
+      const flat: FlatSeat[] = (seatList || []).map((seat: any) => {
         let x = 200, y = 200
         if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
         return { id: seat.id, seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }

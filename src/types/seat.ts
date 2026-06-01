@@ -80,6 +80,26 @@ export interface SeatMapLayoutResponse extends SeatMapResponse {
   sections: SeatSectionLayoutResponse[]
 }
 
+export interface Bbox {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+// Metadata-only response (no seats) — bootstraps both the design editor and booking view.
+export interface SeatMapMetaResponse extends SeatMapResponse {
+  objects: SeatObjectResponse[]
+  fullBbox: Bbox
+  sections?: SeatSectionLayoutResponse[]
+}
+
+// A viewport chunk of seats (layout only) for the booking view.
+export interface SeatLayoutChunkResponse {
+  seats: SeatLayoutResponse[]
+  bbox: Bbox
+}
+
 export interface CreateSeatMapDto {
   chartId: string
   eventId: string

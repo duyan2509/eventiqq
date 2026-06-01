@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSeatMapBySession, holdSeats } from '../api/seatApi'
+import { getSessionMeta, getSessionSeats, holdSeats } from '../api/seatApi'
 import { getLegends } from '../api/legendApi'
 import * as bookingHub from '../api/seatBookingHub'
-import type { SeatMapLayoutResponse, SeatLayoutResponse, SeatStatusUpdate } from '../types/seat'
+import type { SeatMapMetaResponse, SeatLayoutResponse, SeatStatusUpdate, Bbox } from '../types/seat'
 import type { LegendResponse } from '../types/index'
-import { fitToBoundingBox, bboxFromRects, bboxFromPoints, unionBbox } from '../utils/canvasFit'
+import {
+  fitToBoundingBox, bboxFromRects, unionBbox, viewportWorldBbox, bboxContains,
+  type BoundingBox,
+} from '../utils/canvasFit'
 
 /* ===== Types ===== */
 interface Geometry { x: number; y: number; width: number; height: number; rotation?: number }
@@ -21,14 +24,25 @@ const SEAT_COLORS: Record<string, string> = {
 const SELECTED_COLOR = '#818cf8'
 const SEAT_RADIUS = 8
 
+/* Convert an internal BoundingBox to the API bbox shape. */
+const toApiBbox = (b: BoundingBox): Bbox => ({ x1: b.minX, y1: b.minY, x2: b.maxX, y2: b.maxY })
+/* Convert the seat map's full bbox to an internal BoundingBox. */
+const fullToBox = (b: Bbox): BoundingBox => ({ minX: b.x1, minY: b.y1, maxX: b.x2, maxY: b.y2 })
+
 export function SeatBookingPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const seatHitsRef = useRef<SeatHit[]>([])
 
-  const [layout, setLayout] = useState<SeatMapLayoutResponse | null>(null)
+  const [meta, setMeta] = useState<SeatMapMetaResponse | null>(null)
   const [seatMapId, setSeatMapId] = useState('')
+  /* Seats stream in by viewport; keyed by id so chunks merge without duplicates. */
+  const [loadedSeats, setLoadedSeats] = useState<Map<string, SeatLayoutResponse>>(new Map())
+  const [loadedBbox, setLoadedBbox] = useState<BoundingBox | null>(null)
+  const loadedBboxRef = useRef<BoundingBox | null>(null)
+  useEffect(() => { loadedBboxRef.current = loadedBbox }, [loadedBbox])
+
   const [statuses, setStatuses] = useState<Map<string, SeatStatusUpdate>>(new Map())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -42,40 +56,40 @@ export function SeatBookingPage() {
     return m
   }, [legends])
   const [connected, setConnected] = useState(false)
+  const [fetching, setFetching] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [tool, setTool] = useState<'select' | 'pan'>('select')
   const isPanning = useRef(false)
   const panStart = useRef({ x: 0, y: 0 })
-  const hasFittedRef = useRef(false)
+  const [fitted, setFitted] = useState(false)
   const navigate = useNavigate()
 
-  /* Fit content to canvas viewport */
+  /* Fit the full seat map to the canvas viewport (uses meta bounds, not loaded seats). */
   const fitToContent = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas || !layout) return
-    const objectsBbox = bboxFromRects(layout.objects ?? [], o => {
+    if (!canvas || !meta) return
+    const objectsBbox = bboxFromRects(meta.objects ?? [], o => {
       try { return o.geometry ? JSON.parse(o.geometry) : null } catch { return null }
     })
-    const seatPoints = (layout.seats ?? [])
-      .filter(s => s.position)
-      .map(s => { try { return JSON.parse(s.position!) as SeatPos } catch { return null } })
-      .filter((p): p is SeatPos => p !== null)
-    const seatsBbox = bboxFromPoints(seatPoints, SEAT_RADIUS)
+    const seatsBbox = fullToBox(meta.fullBbox)
     const bbox = unionBbox(objectsBbox, seatsBbox)
     if (!bbox) return
-    const view = fitToBoundingBox(bbox, canvas.width, canvas.height, 60, 3)
+    // minZoom = 1: small maps fit fully, but large venues overflow the canvas so the
+    // user pans to explore — which is what drives incremental viewport seat loading.
+    // (No zoom controls on the booking page by design.)
+    const view = fitToBoundingBox(bbox, canvas.width, canvas.height, 60, 3, 1)
     setZoom(view.zoom)
     setPan(view.pan)
-  }, [layout])
+  }, [meta])
 
-  /* Load layout */
+  /* Load metadata (no seats) */
   useEffect(() => {
     if (!sessionId) return
     setLoading(true)
-    getSeatMapBySession(sessionId)
+    getSessionMeta(sessionId)
       .then(data => {
-        setLayout(data)
+        setMeta(data)
         setSeatMapId(data.id)
         getLegends(data.eventId, 1, 50).then(r => setLegends(r.data ?? [])).catch(() => {})
       })
@@ -83,13 +97,54 @@ export function SeatBookingPage() {
       .finally(() => setLoading(false))
   }, [sessionId])
 
+  /* Fetch the seats needed for the current viewport, merging into loadedSeats. */
+  const ensureRegionLoaded = useCallback(async () => {
+    const canvas = canvasRef.current
+    if (!canvas || !sessionId || !meta || canvas.width === 0) return
+
+    const vbb = viewportWorldBbox(canvas.width, canvas.height, pan, zoom)
+    const full = fullToBox(meta.fullBbox)
+    // Already covered? Nothing to do.
+    if (loadedBboxRef.current && bboxContains(loadedBboxRef.current, vbb)) return
+
+    // If the viewport spans the whole map, fetch everything once (zoom-out / small maps).
+    const wholeMap = bboxContains(vbb, full)
+    const apiBbox = wholeMap ? undefined : toApiBbox(vbb)
+
+    setFetching(true)
+    try {
+      const chunk = await getSessionSeats(sessionId, apiBbox)
+      setLoadedSeats(prev => {
+        const next = new Map(prev)
+        chunk.seats.forEach(s => next.set(s.id, s))
+        return next
+      })
+      const covered = wholeMap ? full : vbb
+      setLoadedBbox(prev => unionBbox(prev, covered))
+      // Pull live statuses for the region we just loaded.
+      bookingHub.getRegionStatuses(seatMapId, apiBbox).catch(() => {})
+    } catch {
+      /* leave existing seats; a later pan retries */
+    } finally {
+      setFetching(false)
+    }
+  }, [sessionId, meta, pan, zoom, seatMapId])
+
+  /* Debounced viewport-driven fetch — runs on pan/zoom once the map is fitted. */
+  useEffect(() => {
+    if (!fitted) return
+    const t = setTimeout(() => { ensureRegionLoaded() }, 300)
+    return () => clearTimeout(t)
+  }, [fitted, ensureRegionLoaded])
+
   /* Connect booking hub once seatMapId is known */
   useEffect(() => {
     if (!seatMapId) return
     bookingHub.connectToBookingHub(seatMapId, {
       onInitialStatuses: (updates: SeatStatusUpdate[]) => {
-        setStatuses(() => {
-          const m = new Map<string, SeatStatusUpdate>()
+        // Region statuses arrive incrementally — merge, never replace.
+        setStatuses(prev => {
+          const m = new Map(prev)
           updates.forEach(u => m.set(u.seatId, u))
           return m
         })
@@ -103,7 +158,12 @@ export function SeatBookingPage() {
       },
       onClose: () => setConnected(false),
     })
-      .then(() => setConnected(true))
+      .then(() => {
+        setConnected(true)
+        // Statuses for whatever region is already loaded.
+        const lb = loadedBboxRef.current
+        bookingHub.getRegionStatuses(seatMapId, lb ? toApiBbox(lb) : undefined).catch(() => {})
+      })
       .catch(() => setError('Real-time connection failed.'))
 
     return () => { bookingHub.disconnectFromBookingHub(seatMapId) }
@@ -112,7 +172,7 @@ export function SeatBookingPage() {
   /* Canvas draw */
   const draw = useCallback(() => {
     const canvas = canvasRef.current
-    if (!canvas || !layout) return
+    if (!canvas || !meta) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -128,7 +188,7 @@ export function SeatBookingPage() {
     for (let y = 0; y < h * 2; y += 40) { ctx.beginPath(); ctx.moveTo(-w, y); ctx.lineTo(w * 2, y); ctx.stroke() }
 
     // Objects
-    ;(layout.objects ?? []).forEach(obj => {
+    ;(meta.objects ?? []).forEach(obj => {
       const geo: Geometry = obj.geometry ? JSON.parse(obj.geometry) : { x: 50, y: 50, width: 200, height: 80 }
       ctx.save()
       ctx.translate(geo.x + geo.width / 2, geo.y + geo.height / 2)
@@ -146,9 +206,9 @@ export function SeatBookingPage() {
       ctx.restore()
     })
 
-    // Seats (flat list with absolute position)
-    const hits: SeatHit[] = [];
-    (layout.seats ?? []).forEach((seat: SeatLayoutResponse) => {
+    // Seats (only the ones streamed in so far)
+    const hits: SeatHit[] = []
+    loadedSeats.forEach((seat: SeatLayoutResponse) => {
       if (!seat.position) return
       let pos: SeatPos
       try { pos = JSON.parse(seat.position) } catch { return }
@@ -182,20 +242,20 @@ export function SeatBookingPage() {
     })
     seatHitsRef.current = hits
     ctx.restore()
-  }, [layout, statuses, selected, pan, zoom, legendMap])
+  }, [meta, loadedSeats, statuses, selected, pan, zoom, legendMap])
 
   useEffect(() => { draw() }, [draw])
 
-  /* Keep canvas sized to its container; fit once when layout is ready */
+  /* Keep canvas sized to its container; fit once when meta is ready */
   useEffect(() => {
     const c = canvasRef.current
     if (!c) return
     const sync = () => {
       c.width = c.clientWidth
       c.height = c.clientHeight
-      if (layout && !hasFittedRef.current && c.width > 0 && c.height > 0) {
+      if (meta && !fitted && c.width > 0 && c.height > 0) {
         fitToContent()
-        hasFittedRef.current = true
+        setFitted(true)
       }
       draw()
     }
@@ -203,7 +263,7 @@ export function SeatBookingPage() {
     const ro = new ResizeObserver(sync)
     ro.observe(c)
     return () => ro.disconnect()
-  }, [draw, layout, fitToContent])
+  }, [draw, meta, fitted, fitToContent])
 
   /* Canvas interactions */
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -242,7 +302,7 @@ export function SeatBookingPage() {
   }
 
   const handleGoToCheckout = async () => {
-    if (!layout || !seatMapId || selected.size === 0) return
+    if (!meta || !seatMapId || selected.size === 0) return
     setHolding(true)
     setHoldError(null)
     try {
@@ -265,7 +325,9 @@ export function SeatBookingPage() {
 
   if (loading) return <div className="flex h-screen items-center justify-center text-slate-400">Loading seat map…</div>
   if (error) return <div className="flex h-screen items-center justify-center text-red-400">{error}</div>
-  if (!layout) return null
+  if (!meta) return null
+
+  const availableCount = [...statuses.values()].filter(s => s.status === 'Available').length
 
   return (
     <div className="flex flex-col" style={{ height: '100vh' }}>
@@ -275,11 +337,12 @@ export function SeatBookingPage() {
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/events')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">← Events</button>
           <div className="h-4 w-px bg-slate-700" />
-          <h2 className="text-sm font-bold truncate max-w-xs">{layout.name}</h2>
+          <h2 className="text-sm font-bold truncate max-w-xs">{meta.name}</h2>
           <div className="flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${connected ? 'bg-emerald-400 shadow-[0_0_4px_rgba(74,222,128,0.5)]' : 'bg-slate-600'}`} />
             <span className="text-[10px] text-slate-500">{connected ? 'Live' : 'Connecting…'}</span>
           </div>
+          {fetching && <span className="text-[10px] text-slate-500 animate-pulse">Loading seats…</span>}
         </div>
       </div>
 
@@ -335,12 +398,12 @@ export function SeatBookingPage() {
             <div className="space-y-1 text-xs">
               <div className="flex justify-between rounded-lg bg-slate-900/40 px-3 py-1.5">
                 <span className="text-slate-500">Total seats</span>
-                <span className="font-semibold text-slate-200">{layout.totalSeats}</span>
+                <span className="font-semibold text-slate-200">{meta.totalSeats}</span>
               </div>
               <div className="flex justify-between rounded-lg bg-slate-900/40 px-3 py-1.5">
                 <span className="text-slate-500">Available</span>
                 <span className="font-semibold text-emerald-400">
-                  {[...statuses.values()].filter(s => s.status === 'Available').length || layout.totalSeats}
+                  {availableCount || meta.totalSeats}
                 </span>
               </div>
             </div>
