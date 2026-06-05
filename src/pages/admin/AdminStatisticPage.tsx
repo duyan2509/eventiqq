@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bar, Line, Pie } from 'react-chartjs-2'
+import { Bar, Line, Pie, Scatter } from 'react-chartjs-2'
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
   BarElement, ArcElement, Title, Tooltip, Legend
@@ -32,39 +32,71 @@ const CHART_OPTS = {
   }
 }
 
+function KpiCard({ data }: { data: Text2SqlResponse }) {
+  const { rows, chartConfig } = data
+  const col = chartConfig.value ?? data.columns[0]
+  const raw = rows[0]?.[col]
+  const num = Number(raw)
+  const display = !isNaN(num) && raw !== null && raw !== ''
+    ? num.toLocaleString('en-US')
+    : String(raw ?? '—')
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+      <p className="text-[11px] uppercase tracking-wider text-gray-400">{col}</p>
+      <p className="mt-2 text-4xl font-bold text-indigo-600">{display}</p>
+    </div>
+  )
+}
+
 function ResultChart({ data }: { data: Text2SqlResponse }) {
-  const { rows, columns, chartType } = data
-  if (!rows.length || columns.length < 2) return null
+  const { rows, chartConfig } = data
+  if (!rows.length) return null
 
-  const labelKey = columns[0]
-  const valueKeys = columns.slice(1).filter(k => rows.every(r => typeof r[k] === 'number' || (typeof r[k] === 'string' && !isNaN(Number(r[k])))))
-  if (valueKeys.length === 0) return null
-
-  const labels = rows.map(r => String(r[labelKey] ?? ''))
-
-  if (chartType === 'pie') {
+  // Pie — single label + single value column.
+  if (chartConfig.type === 'pie' && chartConfig.label && chartConfig.value) {
     const chartData = {
-      labels,
+      labels: rows.map(r => String(r[chartConfig.label!] ?? '')),
       datasets: [{
-        data: rows.map(r => Number(r[valueKeys[0]])),
+        data: rows.map(r => Number(r[chartConfig.value!])),
         backgroundColor: CHART_PALETTE,
       }]
     }
     return <Pie data={chartData} options={{ responsive: true, plugins: { legend: { position: 'right' as const, labels: { color: '#4b5563', font: { size: 11 } } } } }} />
   }
 
+  // Scatter — two numeric axes.
+  if (chartConfig.type === 'scatter' && chartConfig.x && chartConfig.y?.length) {
+    const xKey = chartConfig.x, yKey = chartConfig.y[0]
+    const chartData = {
+      datasets: [{
+        label: `${yKey} vs ${xKey}`,
+        data: rows.map(r => ({ x: Number(r[xKey]), y: Number(r[yKey]) })),
+        backgroundColor: CHART_PALETTE[0],
+      }]
+    }
+    return <Scatter data={chartData} options={CHART_OPTS} />
+  }
+
+  // Bar / line — categorical/temporal x + one or more numeric series.
+  const xKey = chartConfig.x ?? data.columns[0]
+  const valueKeys = (chartConfig.y?.length ? chartConfig.y : data.columns.slice(1))
+    .filter(k => rows.every(r => typeof r[k] === 'number' || (typeof r[k] === 'string' && !isNaN(Number(r[k])))))
+  if (valueKeys.length === 0) return null
+
+  const labels = rows.map(r => String(r[xKey] ?? ''))
+  const isLine = chartConfig.type === 'line'
   const datasets = valueKeys.map((k, i) => ({
     label: k,
     data: rows.map(r => Number(r[k])),
     backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length],
     borderColor: CHART_PALETTE[i % CHART_PALETTE.length].replace('0.75', '1'),
-    borderRadius: chartType === 'bar' ? 6 : 0,
+    borderRadius: isLine ? 0 : 6,
     tension: 0.4,
-    fill: chartType === 'line',
+    fill: isLine,
   }))
 
   const chartData = { labels, datasets }
-  return chartType === 'line' ? <Line data={chartData} options={CHART_OPTS} /> : <Bar data={chartData} options={CHART_OPTS} />
+  return isLine ? <Line data={chartData} options={CHART_OPTS} /> : <Bar data={chartData} options={CHART_OPTS} />
 }
 
 export function AdminStatisticPage() {
@@ -146,8 +178,18 @@ export function AdminStatisticPage() {
       {/* Result */}
       {result && !loading && (
         <>
-          {/* Chart */}
+          {/* Title */}
           {result.rows.length > 0 && (
+            <h2 className="text-lg font-bold text-gray-900">{result.title}</h2>
+          )}
+
+          {/* KPI card */}
+          {result.rows.length > 0 && result.chartType === 'kpi' && (
+            <KpiCard data={result} />
+          )}
+
+          {/* Chart */}
+          {result.rows.length > 0 && result.chartType !== 'kpi' && result.chartType !== 'table' && (
             <div className="rounded-xl border border-gray-200 bg-white p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-900">

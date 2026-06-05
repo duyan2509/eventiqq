@@ -57,12 +57,22 @@ export async function getOrgAnalytics(orgId: string): Promise<OrgAnalyticsOvervi
   return res.data
 }
 
+export interface ChartConfig {
+  type: 'kpi' | 'line' | 'pie' | 'bar' | 'scatter' | 'table'
+  x?: string
+  y?: string[]
+  label?: string
+  value?: string
+}
+
 export interface Text2SqlResponse {
   question: string
+  title: string
   sql: string
   rows: Record<string, unknown>[]
   columns: string[]
   chartType: string
+  chartConfig: ChartConfig
   relevantTables: string[]
   method: string
   retries: number
