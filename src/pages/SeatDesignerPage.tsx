@@ -29,12 +29,6 @@ const SEAT_COLORS: Record<string, string> = { Available: '#4ade80', Holding: '#f
 // Fill tint per seat type (1-4) — blended with status color on canvas via border
 const TYPE_BORDER_COLORS: Record<number, string> = { 1: '#94a3b8', 2: '#a78bfa', 3: '#fb923c', 4: '#f472b6' }
 
-function bandLabel(i: number): string {
-  let label = ''; let n = i
-  do { label = String.fromCharCode(65 + (n % 26)) + label; n = Math.floor(n / 26) - 1 } while (n >= 0)
-  return label
-}
-
 export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const { eventId, seatMapId: paramSeatMapId } = useParams<{ eventId: string; seatMapId?: string }>()
   const [searchParams] = useSearchParams()
@@ -684,34 +678,6 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
     hub.setSeatLegend(seatMapId, ids, legendId)?.catch(loadSeatMap)
   }
 
-  const handleUpdateSeatType = (seatType: number) => {
-    if (readOnly) return
-    const updates = [...selectedIds].map(id => ({ seatId: id, seatType }))
-    setSeats(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, seatType } : s))
-    hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
-  }
-
-  const handleAutoLabel = () => {
-    if (seats.length === 0 || readOnly) return
-    const sorted = [...seats].sort((a, b) => a.y - b.y)
-    const threshold = seatSpacing * 0.7
-    const bands: FlatSeat[][] = []
-    for (const seat of sorted) {
-      const last = bands[bands.length - 1]
-      if (!last || seat.y - last[last.length - 1].y > threshold) bands.push([seat])
-      else last.push(seat)
-    }
-    const assignments: { id: string; label: string }[] = []
-    bands.forEach((band, bi) => {
-      const row = [...band].sort((a, b) => a.x - b.x)
-      row.forEach((seat, ci) => assignments.push({ id: seat.id, label: `${bandLabel(bi)}${ci + 1}` }))
-    })
-    const labelMap = new Map(assignments.map(a => [a.id, a.label]))
-    setSeats(prev => prev.map(s => ({ ...s, label: labelMap.get(s.id) ?? s.label })))
-    const updates = assignments.map(a => ({ seatId: a.id, label: a.label }))
-    hub.updateSeats(seatMapId, { seats: updates })?.catch(loadSeatMap)
-  }
-
   const handleSaveVersion = async () => {
     try { await saveVersion(seatMapId, 'Manual save'); alert('Version saved!') } catch { alert('Save failed.') }
   }
@@ -739,8 +705,6 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
 
   /* ===== Derived ===== */
   const selectedSeats = seats.filter(s => selectedIds.has(s.id))
-  const selSeatType = selectedSeats.length > 0 ? selectedSeats[0].seatType : null
-  const uniformType = selectedSeats.every(s => s.seatType === selSeatType) ? selSeatType : null
 
   const legendStats = legends.map(l => ({ legend: l, count: seats.filter(s => s.legendId === l.id).length }))
   const noLegendCount = seats.filter(s => !s.legendId).length
@@ -772,15 +736,11 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-500">{Math.round(zoom * 100)}%</span>
-          <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.min(4, z * 1.2))}>+</button>
-          <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={() => setZoom(z => Math.max(0.2, z * 0.8))}>−</button>
           <button className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-400 hover:text-white" onClick={fitToContent}>Fit</button>
           {readOnly
             ? <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold text-amber-400">View Only</span>
             : (<>
                 <div className="h-4 w-px bg-slate-700" />
-                <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleAutoLabel} title="Auto-assign row/seat labels based on position">Auto-label</button>
                 <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleSaveVersion}>Save</button>
                 <button className="rounded border border-slate-700 px-2.5 py-0.5 text-xs text-slate-400 hover:text-white" onClick={handleLoadVersions}>Versions</button>
               </>)
@@ -879,22 +839,6 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
                   )
                 })()}
               </div>
-
-              {!readOnly && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Seat Type</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {([1, 2, 3, 4] as const).map(t => (
-                      <button key={t}
-                        className={`rounded-lg py-2 text-[11px] font-semibold transition-colors ${uniformType === t ? 'text-white border-2' : 'border border-slate-700/40 text-slate-400 hover:bg-slate-800/50'}`}
-                        style={uniformType === t ? { borderColor: TYPE_BORDER_COLORS[t], background: TYPE_BORDER_COLORS[t] + '22' } : {}}
-                        onClick={() => handleUpdateSeatType(t)}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <LegendSection
                 legends={legends} loading={legendsLoading} error={legendsError}
