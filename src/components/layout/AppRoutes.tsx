@@ -24,6 +24,7 @@ import { AdminEventsPage } from '../../pages/admin/AdminEventsPage'
 import { AdminUsersPage } from '../../pages/admin/AdminUsersPage'
 import { AdminRevenuePage } from '../../pages/admin/AdminRevenuePage'
 import { AdminStatisticPage } from '../../pages/admin/AdminStatisticPage'
+import { AdminChatPage } from '../../pages/admin/AdminChatPage'
 import type { Role, UserInfo } from '../../types/auth'
 
 interface AppRoutesProps {
@@ -69,6 +70,7 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged, onSignOut }: A
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="revenue" element={<AdminRevenuePage />} />
         <Route path="statistic" element={<AdminStatisticPage />} />
+        <Route path="chat" element={<AdminChatPage />} />
       </Route>
 
       <Route path="/sessions/:sessionId/book" element={<AuthGuard user={user} message="Please sign in to book seats."><SeatBookingPage /></AuthGuard>} />

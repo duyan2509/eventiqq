@@ -77,9 +77,16 @@ export interface Text2SqlResponse {
   method: string
   retries: number
   error: string | null
+  answer?: string | null   // natural-language answer (chat endpoint only)
 }
 
 export async function askAnalytics(question: string): Promise<Text2SqlResponse> {
   const res = await http.post<Text2SqlResponse>('/analytics/query', { question })
+  return res.data
+}
+
+// Chat variant: same Text2SQL pipeline + a natural-language `answer`.
+export async function askAnalyticsChat(question: string): Promise<Text2SqlResponse> {
+  const res = await http.post<Text2SqlResponse>('/analytics/chat', { question })
   return res.data
 }
