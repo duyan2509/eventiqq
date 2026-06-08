@@ -57,19 +57,36 @@ export async function getOrgAnalytics(orgId: string): Promise<OrgAnalyticsOvervi
   return res.data
 }
 
+export interface ChartConfig {
+  type: 'kpi' | 'line' | 'pie' | 'bar' | 'scatter' | 'table'
+  x?: string
+  y?: string[]
+  label?: string
+  value?: string
+}
+
 export interface Text2SqlResponse {
   question: string
+  title?: string             // backend may omit; falls back to the question
   sql: string
   rows: Record<string, unknown>[]
   columns: string[]
   chartType: string
+  chartConfig?: ChartConfig  // optional: backend may omit, then axes are derived from data shape
   relevantTables: string[]
   method: string
   retries: number
   error: string | null
+  answer?: string | null   // natural-language answer (chat endpoint only)
 }
 
 export async function askAnalytics(question: string): Promise<Text2SqlResponse> {
   const res = await http.post<Text2SqlResponse>('/analytics/query', { question })
+  return res.data
+}
+
+// Chat variant: same Text2SQL pipeline + a natural-language `answer`.
+export async function askAnalyticsChat(question: string): Promise<Text2SqlResponse> {
+  const res = await http.post<Text2SqlResponse>('/analytics/chat', { question })
   return res.data
 }

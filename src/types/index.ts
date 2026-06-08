@@ -153,6 +153,7 @@ export interface OrderResponse {
   platformFee: number
   createdAt: string
   paidAt?: string
+  settledBy?: 'Webhook' | 'Reconciliation' | null
   items: OrderItemResponse[]
 }
 

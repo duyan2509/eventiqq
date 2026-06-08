@@ -300,6 +300,7 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
       conn.on('UserJoined', (u: OnlineUser) => setOnlineUsers(prev => [...prev.filter(x => x.userId !== u.userId), u]))
       conn.on('UserLeft', (uid: string) => { setOnlineUsers(prev => prev.filter(x => x.userId !== uid)); setCursors(prev => prev.filter(c => c.userId !== uid)) })
       conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => setCursors(prev => [...prev.filter(c => c.userId !== d.userId), { userId: d.userId, x: d.x, y: d.y, color: '#818cf8' /* overridden at draw time */ }]))
+      conn.on('CursorLeft', (uid: string) => setCursors(prev => prev.filter(c => c.userId !== uid)))
 
       /* Seat events */
       conn.on('SeatAdded', (seat: any) => {
@@ -647,6 +648,8 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
   const handleMouseLeave = () => {
     if (mouseStateRef.current === 'panning') mouseStateRef.current = 'idle'
     setSeatDrawPreview(null)
+    // Tell collaborators to drop our cursor instead of leaving it frozen on screen.
+    if (connected && seatMapId) hub.sendCursorLeave(seatMapId)
   }
 
   /* ===== Keyboard ===== */

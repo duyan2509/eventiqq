@@ -78,6 +78,12 @@ export function sendCursorPosition(seatMapId: string, x: number, y: number) {
   connection?.send('SendCursorPosition', seatMapId, { x, y })
 }
 
+// Notify peers our cursor has left the canvas so they can hide it.
+export function sendCursorLeave(seatMapId: string) {
+  _lastCursorSend = 0  // let the next move send immediately instead of being throttled
+  connection?.send('SendCursorLeave', seatMapId)
+}
+
 export function sendSelection(seatMapId: string, elementIds: string[]) {
   return connection?.invoke('SendSelection', seatMapId, { elementIds })
 }

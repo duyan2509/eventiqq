@@ -19,11 +19,12 @@ import { EventCheckInPage } from '../../pages/EventCheckInPage'
 // OrgAnalyticsTab is used inside OrgWorkspacePage directly
 import { OrgWorkspacePage } from '../../pages/OrgWorkspacePage'
 import { AdminLayout } from '../admin/AdminLayout'
-import { AdminDashboardPage } from '../../pages/admin/AdminDashboardPage'
 import { AdminEventsPage } from '../../pages/admin/AdminEventsPage'
 import { AdminUsersPage } from '../../pages/admin/AdminUsersPage'
 import { AdminRevenuePage } from '../../pages/admin/AdminRevenuePage'
 import { AdminStatisticPage } from '../../pages/admin/AdminStatisticPage'
+import { AdminChatPage } from '../../pages/admin/AdminChatPage'
+import { AdminWebhooksPage } from '../../pages/admin/AdminWebhooksPage'
 import type { Role, UserInfo } from '../../types/auth'
 
 interface AppRoutesProps {
@@ -47,7 +48,7 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged, onSignOut }: A
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
-      <Route path="/auth" element={<AuthPage onAuthenticated={(u) => { onAuthenticated(u); navigate(u.currentRole === 'Admin' ? '/admin/dashboard' : '/') }} />} />
+      <Route path="/auth" element={<AuthPage onAuthenticated={(u) => { onAuthenticated(u); navigate(u.currentRole === 'Admin' ? '/admin' : '/') }} />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/events" element={<EventsPage />} />
@@ -63,12 +64,13 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged, onSignOut }: A
           : <div className="glass p-8 text-center text-sm text-slate-400">Admin access only.</div>
         }
       >
-        <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<AdminDashboardPage />} />
+        <Route index element={<Navigate to="events" replace />} />
         <Route path="events" element={<AdminEventsPage />} />
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="revenue" element={<AdminRevenuePage />} />
         <Route path="statistic" element={<AdminStatisticPage />} />
+        <Route path="chat" element={<AdminChatPage />} />
+        <Route path="webhooks" element={<AdminWebhooksPage />} />
       </Route>
 
       <Route path="/sessions/:sessionId/book" element={<AuthGuard user={user} message="Please sign in to book seats."><SeatBookingPage /></AuthGuard>} />

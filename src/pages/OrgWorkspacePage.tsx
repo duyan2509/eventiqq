@@ -12,7 +12,7 @@ import { OrgMembersTab } from '../components/org/OrgMembersTab'
 import { OrgInvitationsTab } from '../components/org/OrgInvitationsTab'
 import { OrgPermissionsTab } from '../components/org/OrgPermissionsTab'
 import { OrgEventsTab } from '../components/org/OrgEventsTab'
-import { OrgAnalyticsTab } from '../components/org/OrgAnalyticsTab'
+import { OrgAnalyticsSection } from '../components/org/OrgAnalyticsSection'
 
 type Tab = 'events' | 'members' | 'invitations' | 'permissions' | 'payment' | 'analytics'
 
@@ -395,7 +395,7 @@ export function OrgWorkspacePage({ user }: Props) {
                 <h1>Analytics</h1>
                 <p className="text-sm text-slate-400">Revenue and ticket sales overview for your organization.</p>
               </div>
-              <OrgAnalyticsTab orgId={orgId} />
+              <OrgAnalyticsSection orgId={orgId} />
             </div>
           )}
 
