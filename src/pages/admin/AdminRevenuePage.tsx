@@ -13,6 +13,11 @@ const STATUS_BADGE: Record<string, string> = {
   Failed: 'bg-red-50 text-red-600',
 }
 
+const SETTLED_BADGE: Record<string, string> = {
+  Webhook: 'bg-blue-50 text-blue-700',
+  Reconciliation: 'bg-purple-50 text-purple-700',
+}
+
 export function AdminRevenuePage() {
   const [config, setConfig] = useState<PlatformConfigResponse | null>(null)
   const [loadingConfig, setLoadingConfig] = useState(true)
@@ -136,6 +141,7 @@ export function AdminRevenuePage() {
                     <th className="px-2 py-2 font-medium text-right">Amount</th>
                     <th className="px-2 py-2 font-medium text-right">Fee</th>
                     <th className="px-2 py-2 font-medium">Status</th>
+                    <th className="px-2 py-2 font-medium">Settled</th>
                     <th className="px-2 py-2 font-medium">Date</th>
                   </tr>
                 </thead>
@@ -148,6 +154,11 @@ export function AdminRevenuePage() {
                       <td className="px-2 py-2 text-right font-mono text-emerald-600">${o.platformFee.toFixed(2)}</td>
                       <td className="px-2 py-2">
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_BADGE[o.status] ?? 'bg-slate-700/40 text-gray-400'}`}>{o.status}</span>
+                      </td>
+                      <td className="px-2 py-2">
+                        {o.settledBy
+                          ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${SETTLED_BADGE[o.settledBy] ?? 'bg-gray-100 text-gray-600'}`}>{o.settledBy}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-2 py-2 text-gray-500 whitespace-nowrap">{formatDate(o.createdAt)}</td>
                     </tr>
