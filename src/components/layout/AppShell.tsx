@@ -83,7 +83,7 @@ export function AppShell() {
           {user?.currentRole === 'Admin' && (
             <button
               className="rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-              onClick={() => navigate('/admin/dashboard')}
+              onClick={() => navigate('/admin')}
             >
               Admin
             </button>
