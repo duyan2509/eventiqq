@@ -67,12 +67,12 @@ export interface ChartConfig {
 
 export interface Text2SqlResponse {
   question: string
-  title: string
+  title?: string             // backend may omit; falls back to the question
   sql: string
   rows: Record<string, unknown>[]
   columns: string[]
   chartType: string
-  chartConfig: ChartConfig
+  chartConfig?: ChartConfig  // optional: backend may omit, then axes are derived from data shape
   relevantTables: string[]
   method: string
   retries: number

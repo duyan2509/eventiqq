@@ -5,7 +5,7 @@ import {
   BarElement, ArcElement, Title, Tooltip, Legend
 } from 'chart.js'
 import { askAnalytics } from '../../api/analyticsApi'
-import type { Text2SqlResponse } from '../../api/analyticsApi'
+import type { Text2SqlResponse, ChartConfig } from '../../api/analyticsApi'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend)
 
@@ -81,8 +81,8 @@ function availableChartTypes(data: Text2SqlResponse): string[] {
 }
 
 function KpiCard({ data, t }: { data: Text2SqlResponse; t: Record<string, string> }) {
-  const { rows, chartConfig } = data
-  const col = chartConfig.value ?? data.columns[0]
+  const { rows } = data
+  const col = data.chartConfig?.value ?? data.columns[0]
   const raw = rows[0]?.[col]
   const num = Number(raw)
   const display = !isNaN(num) && raw !== null && raw !== ''
@@ -97,7 +97,9 @@ function KpiCard({ data, t }: { data: Text2SqlResponse; t: Record<string, string
 }
 
 function ResultChart({ data, type, t }: { data: Text2SqlResponse; type: string; t: Record<string, string> }) {
-  const { rows, chartConfig, columns } = data
+  const { rows, columns } = data
+  // Backend may omit chartConfig — fall back to {} so axes are derived from data shape.
+  const chartConfig: Partial<ChartConfig> = data.chartConfig ?? {}
   if (!rows.length || type === 'table') return null
 
   const numeric = columns.filter(c => isNumericCol(rows, c))
@@ -249,7 +251,7 @@ export function Text2SqlConsole({
         return (
           <>
             {result.rows.length > 0 && (
-              <h2 className={`text-lg font-bold ${t.heading}`}>{result.title}</h2>
+              <h2 className={`text-lg font-bold ${t.heading}`}>{result.title ?? result.question}</h2>
             )}
 
             {result.rows.length > 0 && result.chartType === 'kpi' && (
