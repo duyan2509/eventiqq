@@ -279,6 +279,11 @@ export function SeatBookingPage() {
 
   const handleMouseUp = () => { isPanning.current = false }
 
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+    setZoom(z => Math.max(0.3, Math.min(4, z * (e.deltaY > 0 ? 0.9 : 1.1))))
+  }
+
   const handleClick = (e: React.MouseEvent) => {
     if (tool !== 'select') return
     const canvas = canvasRef.current; if (!canvas) return
@@ -355,6 +360,7 @@ export function SeatBookingPage() {
             ref={canvasRef}
             className="block h-full w-full"
             style={{ cursor: tool === 'pan' ? (isPanning.current ? 'grabbing' : 'grab') : 'default' }}
+            onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -377,6 +383,12 @@ export function SeatBookingPage() {
                 {icon}
               </button>
             ))}
+
+            <div className="mx-1.5 h-5 w-px bg-slate-700" />
+            <button title="Zoom out" onClick={() => setZoom(z => Math.max(0.3, z / 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">−</button>
+            <span className="w-10 text-center text-[10px] tabular-nums text-slate-400">{Math.round(zoom * 100)}%</span>
+            <button title="Zoom in" onClick={() => setZoom(z => Math.min(4, z * 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">+</button>
+            <button title="Fit to content" onClick={fitToContent} className="flex h-8 items-center justify-center rounded-lg px-2 text-[11px] font-medium text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 transition-colors">Fit</button>
           </div>
 
           {/* Hint */}

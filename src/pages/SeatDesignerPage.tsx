@@ -797,6 +797,12 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
                 <span className="w-6 text-center text-[10px] text-slate-400">{seatSpacing}</span>
               </>
             )}
+
+            <div className="mx-1.5 h-5 w-px bg-slate-700" />
+            <button title="Zoom out" onClick={() => setZoom(z => Math.max(0.2, z / 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">−</button>
+            <span className="w-10 text-center text-[10px] tabular-nums text-slate-400">{Math.round(zoom * 100)}%</span>
+            <button title="Zoom in" onClick={() => setZoom(z => Math.min(4, z * 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">+</button>
+            <button title="Fit to content" onClick={fitToContent} className="flex h-8 items-center justify-center rounded-lg px-2 text-[11px] font-medium text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 transition-colors">Fit</button>
           </div>
 
           {/* Hint bar */}
