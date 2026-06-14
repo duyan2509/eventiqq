@@ -4,7 +4,7 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement,
   BarElement, ArcElement, Title, Tooltip, Legend
 } from 'chart.js'
-import { askAnalytics } from '../../api/analyticsApi'
+import { askAnalytics, pinQuery } from '../../api/analyticsApi'
 import type { Text2SqlResponse, ChartConfig } from '../../api/analyticsApi'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend)
@@ -156,6 +156,8 @@ export interface Text2SqlConsoleProps {
   /** Suggested questions shown as quick-fill chips. */
   samples?: string[]
   placeholder?: string
+  /** Called after a query is successfully pinned (org variant only). */
+  onQueryPinned?: () => void
 }
 
 /**
@@ -168,6 +170,7 @@ export function Text2SqlConsole({
   variant = 'admin',
   samples = [],
   placeholder = 'Ví dụ: Doanh thu theo tháng năm nay',
+  onQueryPinned,
 }: Text2SqlConsoleProps) {
   const t = THEMES[variant]
   const [question, setQuestion] = useState('')
@@ -176,10 +179,12 @@ export function Text2SqlConsole({
   const [error, setError] = useState<string | null>(null)
   const [showSql, setShowSql] = useState(false)
   const [chartType, setChartType] = useState<string | null>(null)
+  const [pinning, setPinning] = useState(false)
+  const [pinned, setPinned] = useState(false)
 
   const ask = async (q: string) => {
     if (!q.trim()) return
-    setLoading(true); setError(null); setResult(null); setChartType(null); setQuestion(q)
+    setLoading(true); setError(null); setResult(null); setChartType(null); setQuestion(q); setPinned(false)
     try {
       const res = await askAnalytics(q)
       setResult(res)
@@ -189,6 +194,20 @@ export function Text2SqlConsole({
       setError(e?.response?.data?.detail ?? e?.message ?? 'Request failed')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handlePin = async () => {
+    if (!result || pinned) return
+    setPinning(true)
+    try {
+      await pinQuery(result.title ?? result.question, result.question, result.sql)
+      setPinned(true)
+      onQueryPinned?.()
+    } catch {
+      // silent — pin failure shouldn't disrupt the result view
+    } finally {
+      setPinning(false)
     }
   }
 
@@ -310,6 +329,24 @@ export function Text2SqlConsole({
                 </div>
               )}
             </div>
+
+            {/* Pin button — org variant only, disabled after pinned */}
+            {variant === 'org' && !result.error && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handlePin}
+                  disabled={pinning || pinned}
+                  className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                    pinned
+                      ? 'bg-emerald-500/20 text-emerald-400 cursor-default'
+                      : 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                  }`}
+                >
+                  <span>{pinned ? '✓' : '📌'}</span>
+                  <span>{pinned ? 'Pinned to dashboard' : pinning ? 'Pinning…' : 'Pin to dashboard'}</span>
+                </button>
+              </div>
+            )}
 
             {/* SQL + meta */}
             <div className={`${t.card} p-5`}>

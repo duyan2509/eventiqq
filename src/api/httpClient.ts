@@ -58,6 +58,13 @@ http.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config
+
+    if (error.response?.status === 403 && error.response?.data?.message === 'Account is banned.') {
+      clearAccessToken()
+      window.location.replace('/login')
+      return Promise.reject(error)
+    }
+
     if (!originalRequest || error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error)
     }

@@ -90,3 +90,25 @@ export async function askAnalyticsChat(question: string): Promise<Text2SqlRespon
   const res = await http.post<Text2SqlResponse>('/analytics/chat', { question })
   return res.data
 }
+
+export interface SavedQuery {
+  id: string
+  title: string
+  question: string
+  sql: string
+  createdAt: string
+}
+
+export async function pinQuery(title: string, question: string, sql: string): Promise<SavedQuery> {
+  const res = await http.post<SavedQuery>('/analytics/saved-queries', { title, question, sql })
+  return res.data
+}
+
+export async function listPinnedQueries(): Promise<SavedQuery[]> {
+  const res = await http.get<SavedQuery[]>('/analytics/saved-queries')
+  return res.data
+}
+
+export async function unpinQuery(id: string): Promise<void> {
+  await http.delete(`/analytics/saved-queries/${id}`)
+}
