@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { askAnalyticsChat } from '../../api/analyticsApi'
 import type { Text2SqlResponse } from '../../api/analyticsApi'
 
@@ -9,172 +9,195 @@ const SAMPLE_QUESTIONS = [
   'Tỷ lệ đơn hàng theo trạng thái',
 ]
 
-interface ChatMessage {
-  id: number
-  role: 'user' | 'assistant'
-  text: string
-  data?: Text2SqlResponse
-  isError?: boolean
-}
-
-/** Collapsible "SQL & data" detail under an assistant answer. */
-function Details({ data }: { data: Text2SqlResponse }) {
+function SqlBlock({ sql }: { sql: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="mt-2 border-t border-gray-100 pt-2">
+    <div>
       <button
         onClick={() => setOpen(o => !o)}
-        className="text-[11px] font-semibold text-gray-400 hover:text-gray-600"
+        className="flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
       >
-        {open ? '▾' : '▸'} SQL & dữ liệu ({data.rows.length} dòng)
+        <span>{open ? '▾' : '▸'}</span>
+        <span>View executed SQL</span>
       </button>
       {open && (
-        <div className="mt-2 space-y-2">
-          <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-2.5 text-[11px] text-gray-700 whitespace-pre-wrap">{data.sql}</pre>
-          {data.rows.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[11px]">
-                <thead>
-                  <tr className="text-left text-[10px] uppercase tracking-wider text-gray-500 border-b border-gray-200">
-                    {data.columns.map(c => <th key={c} className="px-2 py-1.5 font-medium">{c}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.rows.slice(0, 20).map((r, i) => (
-                    <tr key={i} className="border-b border-gray-100">
-                      {data.columns.map(c => (
-                        <td key={c} className="px-2 py-1 text-gray-700">{String(r[c] ?? '—')}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {data.rows.length > 20 && (
-                <p className="text-[10px] text-gray-400 text-right mt-1">Hiển thị 20/{data.rows.length} dòng.</p>
-              )}
-            </div>
-          )}
-        </div>
+        <pre className="mt-2 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-[11px] text-gray-700 whitespace-pre-wrap">
+          {sql}
+        </pre>
       )}
     </div>
   )
 }
 
+function DataTable({ rows, columns }: { rows: Record<string, unknown>[]; columns: string[] }) {
+  if (rows.length === 0) return <p className="text-sm text-gray-400 italic">No data returned.</p>
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            {columns.map(c => (
+              <th key={c} className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 bg-white">
+          {rows.slice(0, 50).map((r, i) => (
+            <tr key={i} className="hover:bg-gray-50 transition-colors">
+              {columns.map(c => (
+                <td key={c} className="px-3 py-2 text-gray-700">{String(r[c] ?? '—')}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 50 && (
+        <p className="px-3 py-2 text-right text-[11px] text-gray-400 bg-gray-50 border-t border-gray-100">
+          Showing 50 of {rows.length} rows
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ResultCard({ result }: { result: Text2SqlResponse }) {
+  if (result.error) {
+    return (
+      <div className="rounded-xl border border-red-200 bg-red-50 p-5 space-y-3">
+        <p className="text-sm font-medium text-red-700">Could not process question</p>
+        <p className="text-sm text-red-600">{result.error}</p>
+        {result.sql && <SqlBlock sql={result.sql} />}
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+      {/* Question label */}
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-600">
+          Question
+        </span>
+        <p className="text-sm text-gray-700">{result.question}</p>
+      </div>
+
+      {/* Answer */}
+      {result.answer && (
+        <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-4 py-3">
+          <p className="text-sm text-indigo-900 leading-relaxed">{result.answer}</p>
+        </div>
+      )}
+
+      {/* Data table */}
+      <DataTable rows={result.rows} columns={result.columns} />
+
+      {/* SQL */}
+      <SqlBlock sql={result.sql} />
+
+      {/* Meta */}
+      <p className="text-[10px] text-gray-400">
+        {result.relevantTables.join(', ')} · {result.method} · {result.retries} retry
+      </p>
+    </div>
+  )
+}
+
 export function AdminChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
-  const nextId = useRef(1)
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const [result, setResult] = useState<Text2SqlResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, loading])
-
-  const send = async (q: string) => {
-    if (!q.trim() || loading) return
-    setQuestion('')
-    setMessages(m => [...m, { id: nextId.current++, role: 'user', text: q }])
+  const ask = async (q: string) => {
+    const trimmed = q.trim()
+    if (!trimmed || loading) return
+    setQuestion(trimmed)
+    setResult(null)
+    setError(null)
     setLoading(true)
     try {
-      const res = await askAnalyticsChat(q)
-      setMessages(m => [...m, {
-        id: nextId.current++,
-        role: 'assistant',
-        text: res.error ? res.error : (res.answer ?? 'Không có câu trả lời.'),
-        data: res,
-        isError: !!res.error,
-      }])
+      const res = await askAnalyticsChat(trimmed)
+      setResult(res)
     } catch (err) {
       const e = err as { response?: { data?: { detail?: string } }; message?: string }
-      setMessages(m => [...m, {
-        id: nextId.current++,
-        role: 'assistant',
-        text: e?.response?.data?.detail ?? e?.message ?? 'Đã xảy ra lỗi.',
-        isError: true,
-      }])
+      setError(e?.response?.data?.detail ?? e?.message ?? 'An unexpected error occurred.')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    ask(question)
+  }
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold text-gray-900">Chat with Data</h1>
-        <p className="text-sm text-gray-500">Hỏi bằng ngôn ngữ tự nhiên, nhận câu trả lời từ dữ liệu — Text2SQL (Groq LLaMA-3.3).</p>
-      </div>
-
-      {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-white p-5 space-y-4">
-        {messages.length === 0 && !loading && (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <p className="text-sm text-gray-400">Bắt đầu bằng một câu hỏi về dữ liệu của hệ thống.</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-              {SAMPLE_QUESTIONS.map(q => (
-                <button
-                  key={q}
-                  onClick={() => send(q)}
-                  className="rounded-full bg-gray-100 px-3 py-1 text-[11px] text-gray-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map(m => (
-          m.role === 'user' ? (
-            <div key={m.id} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-indigo-600 px-4 py-2 text-sm text-white">
-                {m.text}
-              </div>
-            </div>
-          ) : (
-            <div key={m.id} className="flex justify-start">
-              <div className={`max-w-[80%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm ${
-                m.isError ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-800'
-              }`}>
-                <p className="whitespace-pre-wrap">{m.text}</p>
-                {m.data && !m.isError && <Details data={m.data} />}
-              </div>
-            </div>
-          )
-        ))}
-
-        {loading && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-sm bg-gray-100 px-4 py-3">
-              <div className="flex gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.3s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400 [animation-delay:-0.15s]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-400" />
-              </div>
-            </div>
-          </div>
-        )}
+    <div className="mx-auto max-w-3xl space-y-6 py-2">
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Ask your data</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Ask in natural language — the system generates SQL, runs it, and answers.
+        </p>
       </div>
 
       {/* Input */}
-      <form
-        onSubmit={e => { e.preventDefault(); send(question) }}
-        className="mt-3 flex gap-2"
-      >
+      <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           value={question}
           onChange={e => setQuestion(e.target.value)}
-          placeholder="Hỏi về dữ liệu hệ thống…"
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          placeholder="e.g. What is the total revenue this month?"
+          disabled={loading}
+          className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={loading || !question.trim()}
-          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          Send
+          {loading ? 'Processing…' : 'Ask'}
         </button>
       </form>
+
+      {/* Sample questions — chỉ hiện khi chưa có kết quả */}
+      {!result && !loading && !error && (
+        <div className="flex flex-wrap gap-2">
+          {SAMPLE_QUESTIONS.map(q => (
+            <button
+              key={q}
+              onClick={() => ask(q)}
+              className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-colors shadow-sm"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 flex items-center gap-3">
+          <div className="flex gap-1">
+            <span className="h-2 w-2 animate-bounce rounded-full bg-indigo-400 [animation-delay:-0.3s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-indigo-400 [animation-delay:-0.15s]" />
+            <span className="h-2 w-2 animate-bounce rounded-full bg-indigo-400" />
+          </div>
+          <p className="text-sm text-gray-500">Analyzing question and querying data…</p>
+        </div>
+      )}
+
+      {/* Network/server error */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-5">
+          <p className="text-sm font-medium text-red-700">Connection error</p>
+          <p className="mt-1 text-sm text-red-600">{error}</p>
+        </div>
+      )}
+
+      {/* Result */}
+      {result && <ResultCard result={result} />}
     </div>
   )
 }
