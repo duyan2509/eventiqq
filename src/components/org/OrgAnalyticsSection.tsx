@@ -51,15 +51,15 @@ export function OrgAnalyticsSection({ orgId }: { orgId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
-        <button onClick={() => setSub('overview')} className={tabClass(sub === 'overview')}>Tổng quan</button>
-        <button onClick={() => setSub('ask')} className={tabClass(sub === 'ask')}>Hỏi đáp dữ liệu</button>
+        <button onClick={() => setSub('overview')} className={tabClass(sub === 'overview')}>Overview</button>
+        <button onClick={() => setSub('ask')} className={tabClass(sub === 'ask')}>Ask Data</button>
       </div>
 
       {sub === 'ask' ? (
         <Text2SqlConsole
           variant="org"
           samples={ORG_SAMPLES}
-          placeholder="Hỏi về dữ liệu của tổ chức bạn…"
+          placeholder="Ask about your organization's data…"
           onQueryPinned={loadPinned}
         />
       ) : (
@@ -69,7 +69,7 @@ export function OrgAnalyticsSection({ orgId }: { orgId: string }) {
           {/* Pinned queries */}
           {pinned.length > 0 && (
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-300">📌 Câu hỏi đã pin</h3>
+              <h3 className="text-sm font-semibold text-slate-300">📌 Pinned questions</h3>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {pinned.map(q => (
                   <div key={q.id} className="rounded-xl border border-slate-700/40 bg-slate-900/60 p-4 space-y-2">

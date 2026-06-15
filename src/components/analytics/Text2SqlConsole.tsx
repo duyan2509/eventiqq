@@ -52,6 +52,9 @@ const CHART_LABELS: Record<string, string> = {
 function chartOpts(t: Record<string, string>) {
   return {
     responsive: true,
+    // Fill the fixed-height wrapper instead of deriving height from width — keeps
+    // the chart the same size whether the container is wide (admin) or narrow (org).
+    maintainAspectRatio: false,
     plugins: { legend: { labels: { color: t.legend, font: { size: 11 } } } },
     scales: {
       x: { grid: { color: 'rgba(128,128,128,0.08)' }, ticks: { color: t.tick, font: { size: 11 } } },
@@ -65,6 +68,73 @@ function isNumericCol(rows: Record<string, unknown>[], col: string): boolean {
     const v = r[col]
     return typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))
   })
+}
+
+/* ===== Temporal helpers — format date buckets and fill missing periods ===== */
+
+type Granularity = 'month' | 'day'
+
+/** Parse an ISO date/datetime string to a Date, or null if it isn't one. */
+function asDate(v: unknown): Date | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2})?/.test(v)) return null
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? null : d
+}
+
+/** A datetime sitting exactly on a month boundary (UTC) is a monthly bucket. */
+function isMonthBucket(d: Date): boolean {
+  return d.getUTCDate() === 1 && d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
+}
+
+function formatDate(d: Date, g: Granularity): string {
+  const y = d.getUTCFullYear()
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  return g === 'month' ? `${y}-${m}` : `${y}-${m}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+/** Human-friendly cell value: ISO dates → YYYY-MM (monthly) or YYYY-MM-DD. */
+function formatCell(v: unknown): string {
+  if (v == null) return '—'
+  const d = asDate(v)
+  if (!d) return String(v)
+  return formatDate(d, isMonthBucket(d) ? 'month' : 'day')
+}
+
+/**
+ * For a temporal x-axis, return a complete, gap-free period sequence with values
+ * (missing periods = 0) so a "revenue by month" line/bar shows every period, not
+ * only the ones with data. Monthly series expand to the full calendar year(s);
+ * daily series span min→max. Returns null when x isn't fully temporal.
+ */
+function buildTemporalSeries(
+  rows: Record<string, unknown>[], xKey: string, valueKeys: string[],
+): { labels: string[]; data: number[][] } | null {
+  const parsed = rows.map(r => asDate(r[xKey]))
+  if (rows.length === 0 || parsed.some(d => d === null)) return null
+  const dates = parsed as Date[]
+  const g: Granularity = dates.every(isMonthBucket) ? 'month' : 'day'
+
+  const byKey = new Map<string, Record<string, unknown>>()
+  dates.forEach((d, i) => byKey.set(formatDate(d, g), rows[i]))
+
+  const times = dates.map(d => d.getTime())
+  const min = new Date(Math.min(...times))
+  const max = new Date(Math.max(...times))
+
+  const periods: string[] = []
+  if (g === 'month') {
+    for (let yr = min.getUTCFullYear(); yr <= max.getUTCFullYear(); yr++)
+      for (let m = 1; m <= 12; m++) periods.push(`${yr}-${String(m).padStart(2, '0')}`)
+  } else {
+    const cur = new Date(Date.UTC(min.getUTCFullYear(), min.getUTCMonth(), min.getUTCDate()))
+    while (cur <= max) { periods.push(formatDate(cur, 'day')); cur.setUTCDate(cur.getUTCDate() + 1) }
+  }
+
+  const data = valueKeys.map(k => periods.map(p => {
+    const row = byKey.get(p)
+    return row ? Number(row[k]) : 0
+  }))
+  return { labels: periods, data }
 }
 
 /** Chart types the result can render as — derived from data shape, never the question text. */
@@ -102,6 +172,11 @@ function ResultChart({ data, type, t }: { data: Text2SqlResponse; type: string; 
   const chartConfig: Partial<ChartConfig> = data.chartConfig ?? {}
   if (!rows.length || type === 'table') return null
 
+  // Normalize y: backend sends a string[] for bar/line but a bare string for scatter.
+  const yKeys: string[] = Array.isArray(chartConfig.y)
+    ? chartConfig.y
+    : chartConfig.y ? [chartConfig.y] : []
+
   const numeric = columns.filter(c => isNumericCol(rows, c))
   const categorical = columns.filter(c => !numeric.includes(c))
 
@@ -110,15 +185,15 @@ function ResultChart({ data, type, t }: { data: Text2SqlResponse; type: string; 
     const value = chartConfig.value ?? numeric[0]
     if (!value) return null
     const chartData = {
-      labels: rows.map(r => String(r[label] ?? '')),
+      labels: rows.map(r => formatCell(r[label])),
       datasets: [{ data: rows.map(r => Number(r[value])), backgroundColor: CHART_PALETTE }]
     }
-    return <Pie data={chartData} options={{ responsive: true, plugins: { legend: { position: 'right' as const, labels: { color: t.legend, font: { size: 11 } } } } }} />
+    return <Pie data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' as const, labels: { color: t.legend, font: { size: 11 } } } } }} />
   }
 
   if (type === 'scatter') {
     const xKey = chartConfig.x ?? numeric[0]
-    const yKey = chartConfig.y?.[0] ?? numeric.find(c => c !== xKey)
+    const yKey = yKeys[0] ?? numeric.find(c => c !== xKey)
     if (!xKey || !yKey) return null
     const chartData = {
       datasets: [{
@@ -131,15 +206,17 @@ function ResultChart({ data, type, t }: { data: Text2SqlResponse; type: string; 
   }
 
   const xKey = chartConfig.x ?? categorical[0] ?? columns[0]
-  const valueKeys = (chartConfig.y?.length ? chartConfig.y : columns.filter(c => c !== xKey))
+  const valueKeys = (yKeys.length ? yKeys : columns.filter(c => c !== xKey))
     .filter(k => numeric.includes(k))
   if (valueKeys.length === 0) return null
 
-  const labels = rows.map(r => String(r[xKey] ?? ''))
+  // Time-series x → fill missing periods (0) and format labels; otherwise plot as-is.
+  const series = buildTemporalSeries(rows, xKey, valueKeys)
+  const labels = series ? series.labels : rows.map(r => formatCell(r[xKey]))
   const isLine = type === 'line'
   const datasets = valueKeys.map((k, i) => ({
     label: k,
-    data: rows.map(r => Number(r[k])),
+    data: series ? series.data[i] : rows.map(r => Number(r[k])),
     backgroundColor: CHART_PALETTE[i % CHART_PALETTE.length],
     borderColor: CHART_PALETTE[i % CHART_PALETTE.length].replace('0.75', '1'),
     borderRadius: isLine ? 0 : 6,
@@ -169,7 +246,7 @@ export interface Text2SqlConsoleProps {
 export function Text2SqlConsole({
   variant = 'admin',
   samples = [],
-  placeholder = 'Ví dụ: Doanh thu theo tháng năm nay',
+  placeholder = 'e.g. Monthly revenue this year',
   onQueryPinned,
 }: Text2SqlConsoleProps) {
   const t = THEMES[variant]
@@ -296,7 +373,7 @@ export function Text2SqlConsole({
                 </div>
                 {effectiveType === 'table'
                   ? <p className={`text-sm text-center py-6 ${t.faint}`}>Displayed as the data table below.</p>
-                  : <ResultChart data={result} type={effectiveType} t={t} />}
+                  : <div className="relative h-72"><ResultChart data={result} type={effectiveType} t={t} /></div>}
               </div>
             )}
 
@@ -317,7 +394,7 @@ export function Text2SqlConsole({
                       {result.rows.slice(0, 50).map((r, i) => (
                         <tr key={i} className={`border-b ${t.rowBorder} ${t.rowHover}`}>
                           {result.columns.map(c => (
-                            <td key={c} className={`px-2 py-1.5 ${t.td}`}>{String(r[c] ?? '—')}</td>
+                            <td key={c} className={`px-2 py-1.5 ${t.td}`}>{formatCell(r[c])}</td>
                           ))}
                         </tr>
                       ))}

@@ -12,6 +12,8 @@ import * as hub from '../api/seatDesignHub'
 import { getCharts } from '../api/chartApi'
 import type { ChartResponse } from '../types/index'
 import { fitToBoundingBox, bboxFromPoints } from '../utils/canvasFit'
+import { getAccessToken } from '../store/authStore'
+import { decodeJwt } from '../utils/jwt'
 
 /* ===== Local types ===== */
 interface FlatSeat {
@@ -35,13 +37,20 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const navigate = useNavigate()
   const seatMapId = paramSeatMapId || ''
 
-  const [readOnly, setReadOnly] = useState(() => searchParams.get('readOnly') === 'true')
-  useEffect(() => {
-    if (searchParams.get('readOnly') === 'true') { setReadOnly(true); return }
-    const orgId = searchParams.get('orgId')
+  const orgId = searchParams.get('orgId') || ''
+  const forcedReadOnly = searchParams.get('readOnly') === 'true'
+  const [readOnly, setReadOnly] = useState(() => forcedReadOnly)
+  const [kickedReason, setKickedReason] = useState<string | null>(null)
+
+  // Re-evaluate the staff member's designer permission (edit ↔ read-only). Called on
+  // load and again whenever the server signals a PermissionChanged for this user.
+  const recheckPermission = useCallback(() => {
+    if (forcedReadOnly) { setReadOnly(true); return }
     if (!orgId || user?.currentRole !== 'Staff') return
     getMyMembership(orgId).then(m => setReadOnly(!m.isDesigner)).catch(() => setReadOnly(true))
-  }, [searchParams, user?.currentRole])
+  }, [orgId, forcedReadOnly, user?.currentRole])
+
+  useEffect(() => { recheckPermission() }, [recheckPermission])
 
   /* ===== Seat Map Picker ===== */
   const [seatMaps, setSeatMaps] = useState<SeatMapResponse[]>([])
@@ -135,7 +144,31 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   }
 
   /* ===== Designer ===== */
-  return <Designer seatMapId={seatMapId} eventId={eventId || ''} readOnly={readOnly} />
+  if (kickedReason) {
+    return (
+      <div className="fade-in flex h-[60vh] flex-col items-center justify-center gap-4 text-center">
+        <p className="text-4xl">🚫</p>
+        <h2 className="text-lg font-semibold text-slate-200">Access revoked</h2>
+        <p className="max-w-sm text-sm text-slate-400">{kickedReason}</p>
+        <button
+          onClick={() => navigate(-1)}
+          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition-colors"
+        >
+          Go back
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <Designer
+      seatMapId={seatMapId}
+      eventId={eventId || ''}
+      readOnly={readOnly}
+      onPermissionChanged={recheckPermission}
+      onKicked={setKickedReason}
+    />
+  )
 }
 
 /* ===== LegendSection — reusable, handles loading/error/retry ===== */
@@ -195,8 +228,15 @@ function LegendSection({ legends, loading, error, onRetry, mode, selectedSeats, 
 }
 
 /* ===== Designer component (separated to avoid hook-ordering issues with picker early return) ===== */
-function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId: string; readOnly: boolean }) {
+function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked }: {
+  seatMapId: string; eventId: string; readOnly: boolean
+  onPermissionChanged: () => void; onKicked: (reason: string) => void
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // Our own user id (JWT `sub`), so we never render our own cursor/presence if an echo
+  // ever arrives (e.g. a transient second connection from this same browser).
+  const myUserId = useMemo(() => decodeJwt(getAccessToken())?.sub ?? null, [])
 
   /* Canvas view */
   const [zoom, setZoom] = useState(1)
@@ -290,10 +330,27 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
       const conn = await hub.connectToHub(seatMapId)
       setConnected(true)
 
-      conn.on('CurrentPresence', (d: { onlineUsers: OnlineUser[] }) => setOnlineUsers(d.onlineUsers || []))
-      conn.on('UserJoined', (u: OnlineUser) => setOnlineUsers(prev => [...prev.filter(x => x.userId !== u.userId), u]))
+      conn.on('CurrentPresence', (d: { onlineUsers: OnlineUser[] }) => setOnlineUsers((d.onlineUsers || []).filter(u => u.userId !== myUserId)))
+      conn.on('UserJoined', (u: OnlineUser) => { if (u.userId === myUserId) return; setOnlineUsers(prev => [...prev.filter(x => x.userId !== u.userId), u]) })
       conn.on('UserLeft', (uid: string) => { setOnlineUsers(prev => prev.filter(x => x.userId !== uid)); setCursors(prev => prev.filter(c => c.userId !== uid)) })
-      conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => setCursors(prev => [...prev.filter(c => c.userId !== d.userId), { userId: d.userId, x: d.x, y: d.y, color: '#818cf8' /* overridden at draw time */ }]))
+      // Staff removed from the org — if it's us, leave the session; otherwise drop them from presence.
+      conn.on('UserKicked', (d: { userId: string; reason: string }) => {
+        if (d.userId === myUserId) {
+          hub.disconnectFromHub(seatMapId).catch(() => {})
+          onKicked(d.reason || 'You no longer have access to this seat map.')
+        } else {
+          setOnlineUsers(prev => prev.filter(x => x.userId !== d.userId))
+          setCursors(prev => prev.filter(c => c.userId !== d.userId))
+        }
+      })
+      // Our org permission changed (designer flag may have flipped) — re-check edit access.
+      conn.on('PermissionChanged', (d: { userId: string }) => {
+        if (d.userId === myUserId) onPermissionChanged()
+      })
+      conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => {
+        if (d.userId === myUserId) return  // never render our own cursor
+        setCursors(prev => [...prev.filter(c => c.userId !== d.userId), { userId: d.userId, x: d.x, y: d.y, color: '#818cf8' /* overridden at draw time */ }])
+      })
       conn.on('CursorLeft', (uid: string) => setCursors(prev => prev.filter(c => c.userId !== uid)))
 
       /* Seat events */
@@ -322,7 +379,7 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
     } catch {
       setConnected(false)
     }
-  }, [seatMapId])
+  }, [seatMapId, myUserId, onPermissionChanged, onKicked])
 
   useEffect(() => {
     loadSeatMap()
@@ -460,7 +517,9 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
     }
     const bbox = bboxFromPoints(seats, SEAT_RADIUS + 4)
     if (!bbox) return
-    const view = fitToBoundingBox(bbox, c.width, c.height, 80, 1.5)
+    // Wide zoom bounds so the true fit level is used: zoom in to fill small maps,
+    // zoom out to show large ones. The old 1.5 cap left small maps under-zoomed.
+    const view = fitToBoundingBox(bbox, c.width, c.height, 80, 4, 0.1)
     setZoom(view.zoom)
     setPan(view.pan)
   }, [seats])
@@ -480,7 +539,12 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
   useEffect(() => {
     if (loading || hasFittedRef.current) return
     const c = canvasRef.current
-    if (!c || c.width === 0 || c.height === 0) return
+    // Guard on the rendered (client) size, not the buffer: a freshly mounted <canvas>
+    // defaults to a 300×150 buffer, so fitting before the ResizeObserver sizes it would
+    // compute against the wrong viewport. Size the buffer first, then fit.
+    if (!c || c.clientWidth === 0 || c.clientHeight === 0) return
+    c.width = c.clientWidth
+    c.height = c.clientHeight
     fitToContent()
     hasFittedRef.current = true
   }, [loading, seats, fitToContent])
@@ -799,9 +863,6 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
             )}
 
             <div className="mx-1.5 h-5 w-px bg-slate-700" />
-            <button title="Zoom out" onClick={() => setZoom(z => Math.max(0.2, z / 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">−</button>
-            <span className="w-10 text-center text-[10px] tabular-nums text-slate-400">{Math.round(zoom * 100)}%</span>
-            <button title="Zoom in" onClick={() => setZoom(z => Math.min(4, z * 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">+</button>
             <button title="Fit to content" onClick={fitToContent} className="flex h-8 items-center justify-center rounded-lg px-2 text-[11px] font-medium text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 transition-colors">Fit</button>
           </div>
 
@@ -900,7 +961,7 @@ function Designer({ seatMapId, eventId, readOnly }: { seatMapId: string; eventId
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Status</p>
                 <div className="space-y-1.5">
-                  {Object.entries(SEAT_COLORS).map(([s, c]) => (
+                  {Object.entries(SEAT_COLORS).filter(([s]) => s !== 'Blocked').map(([s, c]) => (
                     <div key={s} className="flex items-center gap-2.5 text-xs text-slate-400">
                       <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ background: c }} />
                       {s}

@@ -161,7 +161,7 @@ export function AdminChatPage() {
         </button>
       </form>
 
-      {/* Sample questions — chỉ hiện khi chưa có kết quả */}
+      {/* Sample questions — only shown before any result */}
       {!result && !loading && !error && (
         <div className="flex flex-wrap gap-2">
           {SAMPLE_QUESTIONS.map(q => (

@@ -60,7 +60,9 @@ export async function getOrgAnalytics(orgId: string): Promise<OrgAnalyticsOvervi
 export interface ChartConfig {
   type: 'kpi' | 'line' | 'pie' | 'bar' | 'scatter' | 'table'
   x?: string
-  y?: string[]
+  // Backend is inconsistent: bar/line send y as a string[], scatter sends a single
+  // string. Accept both; the renderer normalizes via yKeys().
+  y?: string | string[]
   label?: string
   value?: string
 }

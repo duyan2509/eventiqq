@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Role, UserInfo } from '../types/auth'
 import type { OrganizationDetail, OrganizationDto } from '../types/organization'
 import { getMyOrganizations, createOrganization } from '../api/organizationApi'
 import { switchRole, switchToUser } from '../api/authApi'
+import { getAccessToken } from '../store/authStore'
+import { getOrgIdFromToken } from '../utils/jwt'
 
 interface Props { user: UserInfo; onRoleChanged(role: Role, user: UserInfo): void }
 
 export function SwitchRolePage({ user, onRoleChanged }: Props) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [orgs, setOrgs] = useState<OrganizationDetail[]>([])
@@ -55,6 +59,13 @@ export function SwitchRolePage({ user, onRoleChanged }: Props) {
         organizationName: selectedOrg?.name,
       })
       onRoleChanged(updated.currentRole, updated)
+      // On a successful switch into an org context (Organization / Organizer / Staff),
+      // decode the new JWT for the org id and jump straight to that org's workspace.
+      const ORG_SCOPED: Role[] = ['Organization', 'Organizer', 'Staff']
+      if (ORG_SCOPED.includes(updated.currentRole)) {
+        const orgId = getOrgIdFromToken(getAccessToken()) ?? updated.orgId ?? selectedOrgId
+        navigate(`/organizations/${orgId}`)
+      }
     } catch (e: any) {
       setError(e?.response?.data?.message || 'Failed to switch role.')
     } finally {

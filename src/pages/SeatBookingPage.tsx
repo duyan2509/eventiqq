@@ -75,10 +75,11 @@ export function SeatBookingPage() {
     const seatsBbox = fullToBox(meta.fullBbox)
     const bbox = unionBbox(objectsBbox, seatsBbox)
     if (!bbox) return
-    // minZoom = 1: small maps fit fully, but large venues overflow the canvas so the
-    // user pans to explore — which is what drives incremental viewport seat loading.
-    // (No zoom controls on the booking page by design.)
-    const view = fitToBoundingBox(bbox, canvas.width, canvas.height, 60, 3, 1)
+    // Default to fully fitting the whole map in the viewport (matches the seat designer):
+    // wide zoom bounds so small maps zoom in to fill and large venues zoom out to fit.
+    // When the fitted viewport spans the entire map, ensureRegionLoaded fetches all
+    // seats in one shot; panning/zooming afterwards still drives incremental loading.
+    const view = fitToBoundingBox(bbox, canvas.width, canvas.height, 60, 4, 0.1)
     setZoom(view.zoom)
     setPan(view.pan)
   }, [meta])
@@ -385,9 +386,6 @@ export function SeatBookingPage() {
             ))}
 
             <div className="mx-1.5 h-5 w-px bg-slate-700" />
-            <button title="Zoom out" onClick={() => setZoom(z => Math.max(0.3, z / 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">−</button>
-            <span className="w-10 text-center text-[10px] tabular-nums text-slate-400">{Math.round(zoom * 100)}%</span>
-            <button title="Zoom in" onClick={() => setZoom(z => Math.min(4, z * 1.25))} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 text-base transition-colors">+</button>
             <button title="Fit to content" onClick={fitToContent} className="flex h-8 items-center justify-center rounded-lg px-2 text-[11px] font-medium text-slate-400 hover:bg-slate-700/60 hover:text-slate-200 transition-colors">Fit</button>
           </div>
 
