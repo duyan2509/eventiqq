@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ConfigProvider, DatePicker, Select, theme } from 'antd'
+import dayjs, { type Dayjs } from 'dayjs'
 
 import type { EventQuickViewData, EventDetail } from '../types/event'
 import type { SessionResponse, LegendResponse } from '../types/index'
 import { getAllEvents, getEventDetail } from '../api/eventApi'
+import { getProvinces, type Province } from '../api/addressApi'
 import { getSessions } from '../api/sessionApi'
 import { getLegends } from '../api/legendApi'
 import { formatPrice } from '../utils/format'
 
 type DetailTab = 'info' | 'sessions' | 'legends'
+
+// Shared dark theme for the antd controls in the search bar (transparent so they blend into the pill).
+const antdTheme = {
+  algorithm: theme.darkAlgorithm,
+  token: { colorPrimary: '#6366f1', colorBgContainer: 'transparent', colorBorder: 'transparent', fontFamily: 'inherit' },
+}
 
 export function EventsPage() {
   const navigate = useNavigate()
@@ -20,7 +29,9 @@ export function EventsPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterProvince] = useState('')
+  const [filterProvince, setFilterProvince] = useState('')
+  const [startFrom, setStartFrom] = useState('')
+  const [startTo, setStartTo] = useState('')
 
   const [selectedEvent, setSelectedEvent] = useState<EventDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -29,7 +40,11 @@ export function EventsPage() {
   const [sessions, setSessions] = useState<SessionResponse[]>([])
   const [legends, setLegends] = useState<LegendResponse[]>([])
 
-  const fetchEvents = async (p: number, resetPage = false) => {
+  const [provinces, setProvinces] = useState<Province[]>([])
+  // Sort by event start_time: false = soonest first (ASC), true = latest first (DESC)
+  const [sortNewest, setSortNewest] = useState(false)
+
+  const fetchEvents = async (p: number, resetPage = false, newest = sortNewest) => {
     setLoading(true)
     const targetPage = resetPage ? 1 : p
     if (resetPage) setPage(1)
@@ -39,7 +54,11 @@ export function EventsPage() {
         size: 12,
         query: searchQuery || undefined,
         status: 'Approved',
-        province: filterProvince || undefined
+        province: filterProvince || undefined,
+        startFrom: startFrom || undefined,
+        // include the whole selected end day
+        startTo: startTo ? `${startTo}T23:59:59` : undefined,
+        newest
       })
       setEvents(r.data)
       setTotal(r.total)
@@ -49,10 +68,28 @@ export function EventsPage() {
   }
 
   useEffect(() => { fetchEvents(page) }, [page])
+  useEffect(() => { getProvinces().then(setProvinces).catch(() => {}) }, [])
 
   const handleFilter = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     fetchEvents(1, true)
+  }
+
+  const handleSort = (newest: boolean) => {
+    setSortNewest(newest)
+    fetchEvents(1, true, newest)
+  }
+
+  const hasActiveFilters = !!(searchQuery || filterProvince || startFrom || startTo)
+  const clearFilters = () => {
+    setSearchQuery(''); setFilterProvince(''); setStartFrom(''); setStartTo('')
+    fetchEvents(1, true)
+  }
+
+  const dateRange: [Dayjs | null, Dayjs | null] = [startFrom ? dayjs(startFrom) : null, startTo ? dayjs(startTo) : null]
+  const handleDateRange = (vals: [Dayjs | null, Dayjs | null] | null) => {
+    setStartFrom(vals?.[0] ? vals[0].format('YYYY-MM-DD') : '')
+    setStartTo(vals?.[1] ? vals[1].format('YYYY-MM-DD') : '')
   }
 
   const handleDetail = async (id: string) => {
@@ -105,6 +142,13 @@ export function EventsPage() {
                 {/* ── Info Tab ── */}
                 {detailTab === 'info' && (<>
                   <div className="grid grid-cols-2 gap-3 text-sm">
+                    <button
+                      className="col-span-2 flex items-center justify-between rounded-lg border border-slate-700/30 bg-slate-900/40 px-3 py-2 text-left hover:border-indigo-500/40 transition-colors"
+                      onClick={() => navigate(`/org/${selectedEvent.organizationId}`)}
+                    >
+                      <span className="text-slate-400">Organizer</span>
+                      <span className="text-indigo-300">View organization →</span>
+                    </button>
                     <div className="flex justify-between"><span className="text-slate-400">Start</span><span>{formatDate(selectedEvent.startTime)}</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">End</span><span>{formatDate(selectedEvent.endTime)}</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">Location</span><span>{selectedEvent.detailAddress || '—'}</span></div>
@@ -158,27 +202,123 @@ export function EventsPage() {
         </div>
       )}
 
-      {/* ── Page Header & Filters ── */}
-      <div className="glass p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1>Explore Events</h1>
-          <p className="text-sm text-slate-400">Find the best event tailored for you.</p>
-        </div>
-        
-        <form onSubmit={handleFilter} className="flex w-full sm:w-auto items-center gap-2">
-          <input 
-            placeholder="Search events..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="flex-1 sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/60 px-3 py-2 text-sm focus:border-indigo-500/50 focus:outline-none placeholder:text-slate-500"
-          />
-<button type="submit" className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 transition-colors">
-            Search
+      {/* ── Explore Header & Search ── */}
+      <div className="space-y-4">
+        {hasActiveFilters && (
+          <div className="flex justify-end">
+            <button type="button" onClick={clearFilters} className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:border-white/20 hover:text-slate-200">
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {/* segmented search bar */}
+        <form
+          onSubmit={handleFilter}
+          className="flex flex-col gap-1 rounded-3xl border border-white/10 bg-slate-900/60 p-2 shadow-xl shadow-black/30 backdrop-blur-xl md:flex-row md:items-center md:rounded-full md:p-1.5"
+        >
+          {/* event name */}
+          <label className="group flex flex-1 cursor-text items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-white/5 md:rounded-full">
+            <svg className="h-5 w-5 shrink-0 text-slate-500 transition-colors group-focus-within:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Event</span>
+              <input
+                placeholder="Search by name…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full border-0 bg-transparent p-0 text-sm leading-tight text-slate-100 placeholder:text-slate-500 focus:border-0 focus:outline-none focus:ring-0"
+              />
+            </span>
+          </label>
+
+          <div className="hidden h-9 w-px shrink-0 bg-white/10 md:block" />
+
+          {/* province */}
+          <div className="group flex items-center gap-3 rounded-2xl px-4 py-2 transition-colors hover:bg-white/5 md:w-48 md:rounded-full">
+            <svg className="h-5 w-5 shrink-0 text-slate-500 transition-colors group-focus-within:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 21s-7-5.5-7-11a7 7 0 1 1 14 0c0 5.5-7 11-7 11Z" /><circle cx="12" cy="10" r="2.5" /></svg>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Location</span>
+              <ConfigProvider theme={antdTheme}>
+                <Select
+                  value={filterProvince || undefined}
+                  onChange={v => setFilterProvince(v ?? '')}
+                  showSearch
+                  allowClear
+                  variant="borderless"
+                  placeholder="Any province"
+                  optionFilterProp="label"
+                  suffixIcon={null}
+                  popupMatchSelectWidth={240}
+                  className="eventiq-province-select w-full [&_.ant-select-selector]:!px-0 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-slate-100 [&_.ant-select-selection-placeholder]:!text-slate-500"
+                  options={provinces.map(p => ({ value: p.code, label: p.name }))}
+                />
+              </ConfigProvider>
+            </span>
+          </div>
+
+          <div className="hidden h-9 w-px shrink-0 bg-white/10 md:block" />
+
+          {/* date range */}
+          <div className="flex items-center gap-3 rounded-2xl px-4 py-2 md:rounded-full">
+            <svg className="h-5 w-5 shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" /></svg>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">When</span>
+              <ConfigProvider
+                theme={{
+                  ...antdTheme,
+                  components: { DatePicker: { activeBorderColor: 'transparent', hoverBorderColor: 'transparent', paddingInline: 0, paddingBlock: 0 } },
+                }}
+              >
+                <DatePicker.RangePicker
+                  value={dateRange}
+                  onChange={handleDateRange}
+                  variant="borderless"
+                  suffixIcon={null}
+                  allowEmpty={[true, true]}
+                  format="MMM D"
+                  separator={<span className="text-slate-600">→</span>}
+                  placeholder={['Start', 'End']}
+                  popupClassName="eventiq-rangepicker-popup"
+                  className="!p-0 [&_input]:!text-sm [&_input]:!text-slate-200 [&_input::placeholder]:!text-slate-500"
+                />
+              </ConfigProvider>
+            </span>
+          </div>
+
+          {/* submit */}
+          <button
+            type="submit"
+            className="flex shrink-0 items-center justify-center gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/25 transition-all hover:from-indigo-400 hover:to-violet-400 hover:shadow-indigo-500/40 active:scale-95 md:h-12 md:w-12 md:px-0"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" strokeLinecap="round" /></svg>
+            <span className="md:hidden">Search</span>
           </button>
         </form>
       </div>
 
       {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm text-red-400">{error}</div>}
+
+      {/* ── Result count & Sort ── */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-400">{loading ? 'Loading…' : `${total} event${total === 1 ? '' : 's'}`}</p>
+        <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-900/60 py-1.5 pl-3 pr-1 backdrop-blur-md">
+          <svg className="h-4 w-4 shrink-0 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M7 12h10m-6 6h2" strokeLinecap="round" /></svg>
+          <ConfigProvider theme={antdTheme}>
+            <Select
+              value={sortNewest ? 'newest' : 'soonest'}
+              onChange={v => handleSort(v === 'newest')}
+              variant="borderless"
+              popupMatchSelectWidth={170}
+              className="w-36 [&_.ant-select-selection-item]:!text-sm [&_.ant-select-selection-item]:!text-slate-200"
+              options={[
+                { value: 'soonest', label: 'Soonest first' },
+                { value: 'newest', label: 'Latest first' },
+              ]}
+            />
+          </ConfigProvider>
+        </div>
+      </div>
 
       {/* ── Event Grid ── */}
       {loading ? (
