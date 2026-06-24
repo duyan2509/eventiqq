@@ -51,9 +51,15 @@ export async function disconnectFromHub(seatMapId: string): Promise<void> {
 
 // Seat operations
 export function addSeat(seatMapId: string, dto: {
-  seatMapId: string; label: string; seatNumber: number; seatType: number; position?: string; legendId?: string
+  seatMapId: string; seatType: number; position?: string; legendId?: string
 }) {
   return connection?.invoke('AddSeat', seatMapId, dto)
+}
+
+export function addSeats(seatMapId: string, dto: {
+  seatMapId: string; seatType: number; positions: string[]; legendId?: string
+}) {
+  return connection?.invoke('AddSeats', seatMapId, dto)
 }
 
 export function updateSeats(seatMapId: string, dto: { seats: { seatId: string; position?: string; seatType?: number; label?: string; legendId?: string }[] }) {

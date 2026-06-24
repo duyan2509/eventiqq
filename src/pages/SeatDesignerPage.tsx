@@ -359,6 +359,14 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
         if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
         setSeats(prev => [...prev, { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }])
       })
+      conn.on('SeatsAdded', (newSeats: any[]) => {
+        const parsed = (newSeats || []).map((seat: any) => {
+          let x = 200, y = 200
+          if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
+          return { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }
+        })
+        setSeats(prev => [...prev, ...parsed])
+      })
       conn.on('SeatsUpdated', (updated: any[]) => {
         const byId = new Map((updated || []).map((u: any) => [u.id, u]))
         setSeats(prev => prev.map(s => {
@@ -691,13 +699,11 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       setSeatDrawPreview(null); seatDrawStart.current = null
       if (!readOnly) {
         try {
-          const baseNum = seats.length
-          await Promise.all(seatDrawPreview.map((p, i) =>
-            hub.addSeat(seatMapId, {
-              seatMapId, label: `S${baseNum + i + 1}`, seatNumber: baseNum + i + 1,
-              seatType: 1, position: JSON.stringify({ x: Math.round(p.x), y: Math.round(p.y) })
-            })
-          ))
+          await hub.addSeats(seatMapId, {
+            seatMapId,
+            seatType: 1,
+            positions: seatDrawPreview.map(p => JSON.stringify({ x: Math.round(p.x), y: Math.round(p.y) }))
+          })
         } catch (ex: any) { alert('Place seat failed: ' + (ex?.message || ex)) }
       }
     }
