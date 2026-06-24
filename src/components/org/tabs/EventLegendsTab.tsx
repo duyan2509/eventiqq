@@ -25,6 +25,7 @@ export function EventLegendsTab({ eventId, orgId, canEdit, eventStatus }: Props)
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (form.price <= 0) { message.error('Price must be greater than 0'); return }
     try { await createLegend(eventId, orgId, form); message.success('Legend created'); setShowForm(false); setForm({ name: '', color: '#6366f1', price: 0 }); fetchLegends() }
     catch (e: any) { message.error(e?.response?.data?.message || 'Failed.') }
   }
@@ -50,7 +51,7 @@ export function EventLegendsTab({ eventId, orgId, canEdit, eventStatus }: Props)
             </div>
             <div>
               <label className="text-xs text-slate-400">Price (USD)</label>
-              <input type="number" min="0" value={form.price} onChange={e => setForm({ ...form, price: Number(e.target.value) })} placeholder="0 = Free" />
+              <input type="number" min="0.01" step="0.01" value={form.price || ''} onChange={e => setForm({ ...form, price: Number(e.target.value) })} placeholder="e.g. 10.00" />
             </div>
           </div>
           <div className="flex gap-2 pt-1">

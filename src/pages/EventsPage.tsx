@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ConfigProvider, DatePicker, Select, theme } from 'antd'
+import { ConfigProvider, DatePicker, Select, message, theme } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 
 import type { EventQuickViewData, EventDetail } from '../types/event'
@@ -10,6 +10,7 @@ import { getProvinces, type Province } from '../api/addressApi'
 import { getSessions } from '../api/sessionApi'
 import { getLegends } from '../api/legendApi'
 import { formatPrice } from '../utils/format'
+import { getAccessToken } from '../store/authStore'
 
 type DetailTab = 'info' | 'sessions' | 'legends'
 
@@ -42,7 +43,7 @@ export function EventsPage() {
 
   const [provinces, setProvinces] = useState<Province[]>([])
   // Sort by event start_time: false = soonest first (ASC), true = latest first (DESC)
-  const [sortNewest, setSortNewest] = useState(false)
+  const [sortNewest, setSortNewest] = useState(true)
 
   const fetchEvents = async (p: number, resetPage = false, newest = sortNewest) => {
     setLoading(true)
@@ -168,12 +169,17 @@ export function EventsPage() {
                           <p className="text-xs text-slate-500 mt-0.5">📅 {formatDate(s.startTime)} → {formatDate(s.endTime)}</p>
                           {s.chartName && <p className="text-xs text-indigo-400 mt-0.5">🗺 {s.chartName}</p>}
                         </div>
-                        <button
-                          className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
-                          onClick={() => navigate(`/sessions/${s.id}/book`)}
-                        >
-                          Book Seats
-                        </button>
+                        {new Date(s.endTime) >= new Date() && (
+                          <button
+                            className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
+                            onClick={() => {
+                              if (!getAccessToken()) { message.warning('Please log in to book seats'); return }
+                              navigate(`/sessions/${s.id}/book`)
+                            }}
+                          >
+                            Book Seats
+                          </button>
+                        )}
                       </div>
                     ))}</div>
                   )}

@@ -6,6 +6,8 @@ import { getAllEvents, getEventDetail } from '../api/eventApi'
 import { getSessions } from '../api/sessionApi'
 import { getLegends } from '../api/legendApi'
 import { formatPrice } from '../utils/format'
+import { message } from 'antd'
+import { getAccessToken } from '../store/authStore'
 
 type DetailTab = 'info' | 'sessions' | 'legends'
 
@@ -91,12 +93,17 @@ export function HomePage() {
                           <p className="text-xs text-slate-500 mt-0.5">📅 {formatDate(s.startTime)} → {formatDate(s.endTime)}</p>
                           {s.chartName && <p className="text-xs text-indigo-400 mt-0.5">🗺 {s.chartName}</p>}
                         </div>
-                        <button
-                          className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
-                          onClick={() => navigate(`/sessions/${s.id}/book`)}
-                        >
-                          Book Seats
-                        </button>
+                        {new Date(s.endTime) >= new Date() && (
+                          <button
+                            className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
+                            onClick={() => {
+                              if (!getAccessToken()) { message.warning('Please log in to book seats'); return }
+                              navigate(`/sessions/${s.id}/book`)
+                            }}
+                          >
+                            Book Seats
+                          </button>
+                        )}
                       </div>
                     ))}</div>
                   )}

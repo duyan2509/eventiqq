@@ -26,7 +26,7 @@ export function EventSubmissionsTab({ event, orgId, onRefreshList, isOrg }: Prop
 
   const handleSubmit = async () => {
     try { await submitEvent(event.id, orgId); message.success('Submitted for review'); fetchSubmissions(); onRefreshList() }
-    catch (e: any) { message.error(e?.response?.data?.message || 'Failed to submit.') }
+    catch (e: any) { message.error(e?.response?.data?.Message || e?.response?.data?.message || 'Failed to submit.') }
   }
 
   const handleCancel = async () => {

@@ -13,7 +13,8 @@ import { getCharts } from '../api/chartApi'
 import type { ChartResponse } from '../types/index'
 import { fitToBoundingBox, bboxFromPoints } from '../utils/canvasFit'
 import { getAccessToken } from '../store/authStore'
-import { decodeJwt } from '../utils/jwt'
+import { decodeJwt, getOrgIdFromToken } from '../utils/jwt'
+import { tryRefreshSession } from '../api/authApi'
 
 /* ===== Local types ===== */
 interface FlatSeat {
@@ -37,7 +38,7 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const navigate = useNavigate()
   const seatMapId = paramSeatMapId || ''
 
-  const orgId = searchParams.get('orgId') || ''
+  const orgId = searchParams.get('orgId') || getOrgIdFromToken(getAccessToken()) || ''
   const forcedReadOnly = searchParams.get('readOnly') === 'true'
   const [readOnly, setReadOnly] = useState(() => forcedReadOnly)
   const [kickedReason, setKickedReason] = useState<string | null>(null)
@@ -335,8 +336,9 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       conn.on('UserLeft', (uid: string) => { setOnlineUsers(prev => prev.filter(x => x.userId !== uid)); setCursors(prev => prev.filter(c => c.userId !== uid)) })
       // Staff removed from the org — if it's us, leave the session; otherwise drop them from presence.
       conn.on('UserKicked', (d: { userId: string; reason: string }) => {
-        if (d.userId === myUserId) {
+        if (d.userId.toLowerCase() === myUserId?.toLowerCase()) {
           hub.disconnectFromHub(seatMapId).catch(() => {})
+          tryRefreshSession().catch(() => {})
           onKicked(d.reason || 'You no longer have access to this seat map.')
         } else {
           setOnlineUsers(prev => prev.filter(x => x.userId !== d.userId))
@@ -345,7 +347,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       })
       // Our org permission changed (designer flag may have flipped) — re-check edit access.
       conn.on('PermissionChanged', (d: { userId: string }) => {
-        if (d.userId === myUserId) onPermissionChanged()
+        if (d.userId.toLowerCase() === myUserId?.toLowerCase()) window.location.reload()
       })
       conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => {
         if (d.userId === myUserId) return  // never render our own cursor

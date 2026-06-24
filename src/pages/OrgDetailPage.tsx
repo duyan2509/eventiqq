@@ -9,6 +9,8 @@ import { getOrganizationById } from '../api/organizationApi'
 import { getSessions } from '../api/sessionApi'
 import { getLegends } from '../api/legendApi'
 import { formatPrice } from '../utils/format'
+import { message } from 'antd'
+import { getAccessToken } from '../store/authStore'
 
 type DetailTab = 'info' | 'sessions' | 'legends'
 
@@ -108,12 +110,17 @@ export function OrgDetailPage() {
                           <p className="text-xs text-slate-500 mt-0.5">📅 {formatDate(s.startTime as string)} → {formatDate(s.endTime as string)}</p>
                           {s.chartName ? <p className="text-xs text-indigo-400 mt-0.5">🗺 {s.chartName as string}</p> : null}
                         </div>
-                        <button
-                          className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
-                          onClick={() => navigate(`/sessions/${s.id}/book`)}
-                        >
-                          Book Seats
-                        </button>
+                        {new Date(s.endTime as string) >= new Date() && (
+                          <button
+                            className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400 transition-colors flex-shrink-0"
+                            onClick={() => {
+                              if (!getAccessToken()) { message.warning('Please log in to book seats'); return }
+                              navigate(`/sessions/${s.id}/book`)
+                            }}
+                          >
+                            Book Seats
+                          </button>
+                        )}
                       </div>
                     ))}</div>
                   )}
@@ -144,7 +151,6 @@ export function OrgDetailPage() {
         <div className="min-w-0">
           <h1 className="truncate">{org?.name || 'Organization'}</h1>
           {org?.description && <p className="mt-1 text-sm text-slate-400">{org.description}</p>}
-          {org && <p className="mt-2 text-xs text-slate-500">👥 {org.size} member{org.size === 1 ? '' : 's'}</p>}
         </div>
       </div>
 
