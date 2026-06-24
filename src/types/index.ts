@@ -122,6 +122,15 @@ export interface BanUserRequest {
   banReason?: string
 }
 
+export interface BanHistoryModel {
+  userId: string
+  userEmail: string
+  reason: string
+  adminId: string
+  adminEmail: string
+  date: string
+}
+
 export interface PlatformConfigResponse {
   currentFeeRate: number
   pendingFeeRate?: number

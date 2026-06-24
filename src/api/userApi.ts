@@ -1,9 +1,14 @@
-import type { UserResponse, BanUserRequest } from '../types/index'
+import type { UserResponse, BanUserRequest, BanHistoryModel } from '../types/index'
 import type { PaginatedResult } from '../types/organization'
 import { http } from './httpClient'
 
 export async function getAllUsers(query?: string, page = 1, size = 10): Promise<PaginatedResult<UserResponse>> {
   const res = await http.get<PaginatedResult<UserResponse>>('/users', { params: { query, page, size } })
+  return res.data
+}
+
+export async function getUserBanHistory(userId: string, page = 1, size = 10): Promise<PaginatedResult<BanHistoryModel>> {
+  const res = await http.get<PaginatedResult<BanHistoryModel>>(`/users/${userId}/ban-history`, { params: { page, size } })
   return res.data
 }
 

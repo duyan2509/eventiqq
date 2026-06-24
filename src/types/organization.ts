@@ -22,6 +22,12 @@ export interface OrganizationResponse {
   description?: string
 }
 
+export interface UserOrganizationItem {
+  orgId: string
+  orgName: string
+  roleName: string
+}
+
 export interface PaginatedResult<T> {
   data: T[]
   total: number

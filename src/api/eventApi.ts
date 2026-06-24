@@ -7,6 +7,8 @@ export async function getAllEvents(params?: {
   province?: string
   organizationId?: string
   organizationName?: string
+  startFrom?: string
+  startTo?: string
   newest?: boolean
   increasePrice?: boolean
   page?: number

@@ -6,6 +6,7 @@ import { ResetPasswordPage } from '../../pages/ResetPasswordPage'
 import { SwitchRolePage } from '../../pages/SwitchRolePage'
 import { OrganizationsPage } from '../../pages/OrganizationsPage'
 import { EventsPage } from '../../pages/EventsPage'
+import { OrgDetailPage } from '../../pages/OrgDetailPage'
 import { InvitationsPage } from '../../pages/InvitationsPage'
 import { SeatDesignerPage } from '../../pages/SeatDesignerPage'
 import { SeatBookingPage } from '../../pages/SeatBookingPage'
@@ -52,6 +53,7 @@ export function AppRoutes({ user, onAuthenticated, onRoleChanged, onSignOut }: A
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/events" element={<EventsPage />} />
+      <Route path="/org/:orgId" element={<OrgDetailPage />} />
       <Route path="/organizations" element={<AuthGuard user={user} message="Please sign in to view organizations."><OrganizationsPage /></AuthGuard>} />
       <Route path="/organizations/:orgId" element={<AuthGuard user={user} message="Please sign in to view this organization."><OrgWorkspacePage user={user} /></AuthGuard>} />
       <Route path="/invitations" element={<AuthGuard user={user} message="Please sign in to view invitations."><InvitationsPage /></AuthGuard>} />
