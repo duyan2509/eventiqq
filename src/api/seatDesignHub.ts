@@ -63,7 +63,7 @@ export function addSeats(seatMapId: string, dto: {
   return connection?.invoke('AddSeats', seatMapId, dto)
 }
 
-export function updateSeats(seatMapId: string, dto: { seats: { seatId: string; position?: string; seatType?: number; label?: string; legendId?: string }[] }) {
+export function updateSeats(seatMapId: string, dto: { seats: { seatId: string; position?: string; seatType?: number; label?: string; legendId?: string; expectedGeometryVersion?: number }[] }) {
   return connection?.invoke('UpdateSeats', seatMapId, dto)
 }
 
@@ -71,8 +71,8 @@ export function deleteSeats(seatMapId: string, seatIds: string[]) {
   return connection?.invoke('DeleteSeats', seatMapId, seatIds)
 }
 
-export function setSeatLegend(seatMapId: string, seatIds: string[], legendId: string | null) {
-  return connection?.invoke('SetSeatLegend', seatMapId, seatIds, legendId)
+export function setSeatLegend(seatMapId: string, seatIds: string[], legendId: string | null, expectedStyleVersions?: Record<string, number>) {
+  return connection?.invoke('SetSeatLegend', seatMapId, seatIds, legendId, expectedStyleVersions ?? null)
 }
 
 // Object operations

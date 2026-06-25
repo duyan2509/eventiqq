@@ -20,6 +20,7 @@ import { tryRefreshSession } from '../api/authApi'
 interface FlatSeat {
   id: string; seatMapId: string; label: string; seatNumber: number
   status: string; seatType: number; legendId?: string; x: number; y: number
+  geometryVersion: number; styleVersion: number
 }
 interface OnlineUser { userId: string; email: string; displayName: string; avatarColor: string }
 interface CursorInfo { userId: string; x: number; y: number; color: string }
@@ -315,7 +316,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       const flat: FlatSeat[] = (seatList || []).map((seat: any) => {
         let x = 200, y = 200
         if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
-        return { id: seat.id, seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }
+        return { id: seat.id, seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y, geometryVersion: seat.geometryVersion ?? 1, styleVersion: seat.styleVersion ?? 1 }
       })
       setSeats(flat)
     } catch (e: any) {
@@ -380,13 +381,30 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
           if (!u) return s
           let x = s.x, y = s.y
           if (u.position) { try { const p = JSON.parse(u.position); x = p.x; y = p.y } catch { } }
-          return { ...s, x, y, label: u.label ?? s.label, seatType: u.seatType ?? s.seatType, legendId: 'legendId' in u ? (u.legendId ?? undefined) : s.legendId }
+          return {
+            ...s, x, y,
+            label: u.label ?? s.label,
+            seatType: u.seatType ?? s.seatType,
+            legendId: 'legendId' in u ? (u.legendId ?? undefined) : s.legendId,
+            geometryVersion: u.geometryVersion ?? s.geometryVersion,
+            styleVersion: u.styleVersion ?? s.styleVersion,
+          }
         }))
       })
       conn.on('SeatsDeleted', (ids: string[]) => {
         const idSet = new Set(ids)
         setSeats(prev => prev.filter(s => !idSet.has(s.id)))
         setSelectedIds(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n })
+      })
+      conn.on('SeatsConflicted', (conflicts: { seatId: string; currentVersion: number; propertyGroup: string }[]) => {
+        setSeats(prev => prev.map(s => {
+          const c = conflicts.find(x => x.seatId === s.id)
+          if (!c) return s
+          return c.propertyGroup === 'geometry'
+            ? { ...s, geometryVersion: c.currentVersion }
+            : { ...s, styleVersion: c.currentVersion }
+        }))
+        alert(`${conflicts.length} seat(s) were modified by another user. Your changes were not applied — please try again.`)
       })
 
       conn.on('AutoSaved', (d: any) => console.log('Auto-saved v' + d.versionNumber))
@@ -688,9 +706,10 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       setLiveMoveOffset(null); moveStartRef.current = null
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
       if (!readOnly) {
-        const updates = Array.from(origPositions.entries()).map(([id, pos]) => ({
-          seatId: id, position: JSON.stringify({ x: Math.round(pos.x + dx), y: Math.round(pos.y + dy) })
-        }))
+        const updates = Array.from(origPositions.entries()).map(([id, pos]) => {
+          const seat = seats.find(s => s.id === id)
+          return { seatId: id, position: JSON.stringify({ x: Math.round(pos.x + dx), y: Math.round(pos.y + dy) }), expectedGeometryVersion: seat?.geometryVersion }
+        })
         setSeats(prev => prev.map(s => {
           const orig = origPositions.get(s.id)
           if (!orig) return s
@@ -753,8 +772,9 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
   const handleSetLegend = (legendId: string | null) => {
     if (readOnly) return
     const ids = [...selectedIds]
+    const expectedStyleVersions = Object.fromEntries(seats.filter(s => selectedIds.has(s.id)).map(s => [s.id, s.styleVersion]))
     setSeats(prev => prev.map(s => selectedIds.has(s.id) ? { ...s, legendId: legendId ?? undefined } : s))
-    hub.setSeatLegend(seatMapId, ids, legendId)?.catch(loadSeatMap)
+    hub.setSeatLegend(seatMapId, ids, legendId, expectedStyleVersions)?.catch(loadSeatMap)
   }
 
   const handleSaveVersion = async () => {
