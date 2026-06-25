@@ -328,7 +328,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
   const connectHub = useCallback(async () => {
     if (!seatMapId) return
     try {
-      const conn = await hub.connectToHub(seatMapId)
+      const conn = await hub.connectToHub(seatMapId, loadSeatMap)
       setConnected(true)
 
       conn.on('CurrentPresence', (d: { onlineUsers: OnlineUser[] }) => setOnlineUsers((d.onlineUsers || []).filter(u => u.userId !== myUserId)))
@@ -359,7 +359,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       conn.on('SeatAdded', (seat: any) => {
         let x = 200, y = 200
         if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
-        setSeats(prev => [...prev, { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }])
+        setSeats(prev => prev.some(s => s.id === seat.id) ? prev : [...prev, { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }])
       })
       conn.on('SeatsAdded', (newSeats: any[]) => {
         const parsed = (newSeats || []).map((seat: any) => {
@@ -367,7 +367,11 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
           if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
           return { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }
         })
-        setSeats(prev => [...prev, ...parsed])
+        setSeats(prev => {
+          const existingIds = new Set(prev.map(s => s.id))
+          const fresh = parsed.filter((s: any) => !existingIds.has(s.id))
+          return fresh.length ? [...prev, ...fresh] : prev
+        })
       })
       conn.on('SeatsUpdated', (updated: any[]) => {
         const byId = new Map((updated || []).map((u: any) => [u.id, u]))
@@ -389,7 +393,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
     } catch {
       setConnected(false)
     }
-  }, [seatMapId, myUserId, onPermissionChanged, onKicked])
+  }, [seatMapId, myUserId, onPermissionChanged, onKicked, loadSeatMap])
 
   useEffect(() => {
     loadSeatMap()

@@ -84,18 +84,33 @@ export function SeatBookingPage() {
     setPan(view.pan)
   }, [meta])
 
-  /* Load metadata (no seats) */
+  /* Load metadata (no seats) — retry up to 5×/2s for post-approval race */
   useEffect(() => {
     if (!sessionId) return
+    let cancelled = false
     setLoading(true)
-    getSessionMeta(sessionId)
-      .then(data => {
+    setError(null)
+    const attempt = async (triesLeft: number) => {
+      try {
+        const data = await getSessionMeta(sessionId)
+        if (cancelled) return
         setMeta(data)
         setSeatMapId(data.id)
         getLegends(data.eventId, 1, 50).then(r => setLegends(r.data ?? [])).catch(() => {})
-      })
-      .catch(() => setError('Failed to load seat map.'))
-      .finally(() => setLoading(false))
+        setLoading(false)
+      } catch (err: any) {
+        if (cancelled) return
+        const is404 = err?.response?.status === 404 || err?.response?.status === 400
+        if (is404 && triesLeft > 0) {
+          setTimeout(() => attempt(triesLeft - 1), 2000)
+        } else {
+          setError('Seat map not ready yet. Please try again in a moment.')
+          setLoading(false)
+        }
+      }
+    }
+    attempt(4)
+    return () => { cancelled = true }
   }, [sessionId])
 
   /* Fetch the seats needed for the current viewport, merging into loadedSeats. */
@@ -329,8 +344,18 @@ export function SeatBookingPage() {
     }
   }
 
-  if (loading) return <div className="flex h-screen items-center justify-center text-slate-400">Loading seat map…</div>
-  if (error) return <div className="flex h-screen items-center justify-center text-red-400">{error}</div>
+  if (loading) return <div className="flex h-screen items-center justify-center text-slate-400">Loading seat map… (this may take a few seconds after event approval)</div>
+  if (error) return (
+    <div className="flex h-screen flex-col items-center justify-center gap-4 text-red-400">
+      <p>{error}</p>
+      <button
+        onClick={() => window.location.reload()}
+        className="rounded-lg bg-slate-800 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+      >
+        Retry
+      </button>
+    </div>
+  )
   if (!meta) return null
 
   const availableCount = [...statuses.values()].filter(s => s.status === 'Available').length

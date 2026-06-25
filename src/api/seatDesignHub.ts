@@ -13,7 +13,7 @@ export function getConnection(): HubConnection | null {
   return connection
 }
 
-export async function connectToHub(seatMapId: string): Promise<HubConnection> {
+export async function connectToHub(seatMapId: string, onReconnected?: () => void): Promise<HubConnection> {
   // Tear down any prior connection (and wait for its in-flight start) before reconnecting.
   await disconnectFromHub(seatMapId)
 
@@ -25,6 +25,7 @@ export async function connectToHub(seatMapId: string): Promise<HubConnection> {
 
   conn.onreconnected(async () => {
     try { await conn.invoke('JoinSeatMap', seatMapId) } catch { }
+    onReconnected?.()
   })
 
   // Use a local `conn` (never the shared global) across awaits so a concurrent
