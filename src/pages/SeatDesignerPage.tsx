@@ -44,15 +44,28 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
   const [readOnly, setReadOnly] = useState(() => forcedReadOnly)
   const [kickedReason, setKickedReason] = useState<string | null>(null)
 
-  // Re-evaluate the staff member's designer permission (edit ↔ read-only). Called on
-  // load and again whenever the server signals a PermissionChanged for this user.
+  // Re-evaluate edit permission based on current role.
   const recheckPermission = useCallback(() => {
     if (forcedReadOnly) { setReadOnly(true); return }
-    if (!orgId || user?.currentRole !== 'Staff') return
-    getMyMembership(orgId).then(m => setReadOnly(!m.isDesigner)).catch(() => setReadOnly(true))
+    const role = user?.currentRole
+    if (!role || role === 'User' || role === 'Admin') { setReadOnly(true); return }
+    if (role === 'Staff') {
+      if (!orgId) { setReadOnly(true); return }
+      getMyMembership(orgId).then(m => setReadOnly(!m.isDesigner)).catch(() => setReadOnly(true))
+      return
+    }
+    // Organization / Organizer — can edit if orgId matches
+    setReadOnly(!orgId)
   }, [orgId, forcedReadOnly, user?.currentRole])
 
   useEffect(() => { recheckPermission() }, [recheckPermission])
+
+  // Poll permission every 30s for Staff — fallback if hub event is missed
+  useEffect(() => {
+    if (user?.currentRole !== 'Staff' || !orgId) return
+    const id = setInterval(recheckPermission, 30_000)
+    return () => clearInterval(id)
+  }, [user?.currentRole, orgId, recheckPermission])
 
   /* ===== Seat Map Picker ===== */
   const [seatMaps, setSeatMaps] = useState<SeatMapResponse[]>([])
@@ -166,9 +179,11 @@ export function SeatDesignerPage({ user }: { user?: UserInfo | null }) {
     <Designer
       seatMapId={seatMapId}
       eventId={eventId || ''}
+      orgId={orgId}
       readOnly={readOnly}
       onPermissionChanged={recheckPermission}
       onKicked={setKickedReason}
+      onConnectFailed={() => setReadOnly(true)}
     />
   )
 }
@@ -230,9 +245,9 @@ function LegendSection({ legends, loading, error, onRetry, mode, selectedSeats, 
 }
 
 /* ===== Designer component (separated to avoid hook-ordering issues with picker early return) ===== */
-function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked }: {
-  seatMapId: string; eventId: string; readOnly: boolean
-  onPermissionChanged: () => void; onKicked: (reason: string) => void
+function Designer({ seatMapId, eventId, orgId, readOnly, onPermissionChanged, onKicked, onConnectFailed }: {
+  seatMapId: string; eventId: string; orgId: string; readOnly: boolean
+  onPermissionChanged: () => void; onKicked: (reason: string) => void; onConnectFailed: () => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -348,7 +363,7 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       })
       // Our org permission changed (designer flag may have flipped) — re-check edit access.
       conn.on('PermissionChanged', (d: { userId: string }) => {
-        if (d.userId.toLowerCase() === myUserId?.toLowerCase()) window.location.reload()
+        if (d.userId.toLowerCase() === myUserId?.toLowerCase()) onPermissionChanged()
       })
       conn.on('CursorMoved', (d: { userId: string; x: number; y: number }) => {
         if (d.userId === myUserId) return  // never render our own cursor
@@ -360,13 +375,13 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       conn.on('SeatAdded', (seat: any) => {
         let x = 200, y = 200
         if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
-        setSeats(prev => prev.some(s => s.id === seat.id) ? prev : [...prev, { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }])
+        setSeats(prev => prev.some(s => s.id === seat.id) ? prev : [...prev, { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y, geometryVersion: seat.geometryVersion ?? 1, styleVersion: seat.styleVersion ?? 1 }])
       })
       conn.on('SeatsAdded', (newSeats: any[]) => {
         const parsed = (newSeats || []).map((seat: any) => {
           let x = 200, y = 200
           if (seat.position) { try { const p = JSON.parse(seat.position); x = p.x; y = p.y } catch { } }
-          return { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y }
+          return { id: seat.id, seatMapId: seat.seatMapId, label: seat.label, seatNumber: seat.seatNumber, status: seat.status, seatType: seat.seatType, legendId: seat.legendId, x, y, geometryVersion: seat.geometryVersion ?? 1, styleVersion: seat.styleVersion ?? 1 }
         })
         setSeats(prev => {
           const existingIds = new Set(prev.map(s => s.id))
@@ -410,14 +425,15 @@ function Designer({ seatMapId, eventId, readOnly, onPermissionChanged, onKicked 
       conn.on('AutoSaved', (d: any) => console.log('Auto-saved v' + d.versionNumber))
     } catch {
       setConnected(false)
+      onConnectFailed()
     }
-  }, [seatMapId, myUserId, onPermissionChanged, onKicked, loadSeatMap])
+  }, [seatMapId, orgId, myUserId, onPermissionChanged, onKicked, onConnectFailed, loadSeatMap])
 
   useEffect(() => {
     loadSeatMap()
     connectHub()
     return () => { hub.disconnectFromHub(seatMapId) }
-  }, [seatMapId])
+  }, [seatMapId, orgId])
 
   useEffect(() => { loadLegends() }, [loadLegends])
 
