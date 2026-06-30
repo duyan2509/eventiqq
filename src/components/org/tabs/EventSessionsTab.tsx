@@ -93,7 +93,7 @@ export function EventSessionsTab({ eventId, orgId, canEdit, eventStatus }: Props
                 disabled={designLoading === s.id}
                 onClick={() => handleDesign(s.id)}
               >
-                {designLoading === s.id ? '...' : 'Design'}
+                {designLoading === s.id ? '...' : 'Seatmap'}
               </button>
               {canModify && (
                 <Popconfirm title="Delete session?" onConfirm={() => handleDelete(s.id)}>

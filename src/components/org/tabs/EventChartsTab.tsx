@@ -88,7 +88,7 @@ export function EventChartsTab({ eventId, orgId, canEdit, isDesigner, eventStatu
                   disabled={openingChartId === c.id}
                   onClick={() => handleOpenDesigner(c)}
                 >
-                  {openingChartId === c.id ? '...' : canDesign ? '🎨 Design Seat Map' : '👁 View Seat Map'}
+                  {openingChartId === c.id ? '...' : canDesign ? '🎨 Design Template' : '👁 View Template'}
                 </button>
                 {canEdit && isDraft && (
                   <Popconfirm title="Delete chart?" onConfirm={() => handleDelete(c.id)}>
