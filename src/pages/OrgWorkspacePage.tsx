@@ -13,8 +13,9 @@ import { OrgInvitationsTab } from '../components/org/OrgInvitationsTab'
 import { OrgPermissionsTab } from '../components/org/OrgPermissionsTab'
 import { OrgEventsTab } from '../components/org/OrgEventsTab'
 import { OrgAnalyticsSection } from '../components/org/OrgAnalyticsSection'
+import { OrgCheckInsTab } from '../components/org/OrgCheckInsTab'
 
-type Tab = 'events' | 'members' | 'invitations' | 'permissions' | 'payment' | 'analytics'
+type Tab = 'events' | 'members' | 'invitations' | 'permissions' | 'payment' | 'analytics' | 'checkins'
 
 interface Props { user?: UserInfo | null }
 interface NavItem { key: Tab; label: string; icon: React.ReactNode }
@@ -25,6 +26,7 @@ const NAV: NavItem[] = [
   { key: 'permissions', label: 'Permissions', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg> },
   { key: 'payment', label: 'Payment', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" /></svg> },
   { key: 'analytics', label: 'Analytics', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg> },
+  { key: 'checkins', label: 'Check-ins', icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
 ]
 
 export function OrgWorkspacePage({ user }: Props) {
@@ -166,7 +168,7 @@ export function OrgWorkspacePage({ user }: Props) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto space-y-0.5 p-2">
-          {NAV.filter(item => !isStaffRole || item.key === 'events' || item.key === 'members').map(item => (
+          {NAV.filter(item => !isStaffRole || item.key === 'events' || item.key === 'members' || item.key === 'checkins').map(item => (
             <button
               key={item.key}
               onClick={() => handleTab(item.key)}
@@ -387,6 +389,10 @@ export function OrgWorkspacePage({ user }: Props) {
                 </div>
               )}
             </div>
+          )}
+
+          {tab === 'checkins' && (
+            <OrgCheckInsTab />
           )}
 
           {tab === 'analytics' && orgId && (
