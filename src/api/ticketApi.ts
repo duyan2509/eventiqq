@@ -25,3 +25,20 @@ export async function getEventCheckIns(eventId: string): Promise<EventCheckInIte
   const res = await http.get<EventCheckInItem[]>(`/tickets/events/${eventId}/checkins`)
   return res.data
 }
+
+export interface OrgCheckInItem {
+  ticketId: string
+  seatLabel: string
+  legendName: string
+  price: number
+  sessionName: string
+  sessionStart: string
+  eventName: string
+  eventId: string
+  checkedInAt: string
+}
+
+export async function getOrgCheckIns(): Promise<OrgCheckInItem[]> {
+  const res = await http.get<OrgCheckInItem[]>('/tickets/org/checkins')
+  return res.data
+}

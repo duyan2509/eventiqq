@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import jsQR from 'jsqr'
-import { checkInTicket } from '../api/ticketApi'
+import { checkInTicket, getOrgCheckIns } from '../api/ticketApi'
+import type { OrgCheckInItem } from '../api/ticketApi'
 import type { TicketResponse } from '../types/index'
 
 type Status = 'idle' | 'decoding' | 'checking' | 'success' | 'fail'
@@ -12,6 +13,18 @@ export function StaffScanPage() {
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [history, setHistory] = useState<OrgCheckInItem[]>([])
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const items = await getOrgCheckIns()
+      setHistory(items)
+    } catch {
+      // history is optional — fail silently
+    }
+  }, [])
+
+  useEffect(() => { loadHistory() }, [loadHistory])
 
   const resetState = () => {
     setStatus('idle')
@@ -60,6 +73,7 @@ export function StaffScanPage() {
       const ticket = await checkInTicket(token.trim())
       setResult(ticket)
       setStatus('success')
+      loadHistory()
     } catch (err: any) {
       const msg = err?.response?.data?.message
         ?? err?.response?.data?.error
@@ -165,6 +179,42 @@ export function StaffScanPage() {
           </button>
         </div>
       )}
+
+      {/* Org-wide check-in history */}
+      <div className="glass rounded-2xl p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Check-in History</label>
+          <button onClick={loadHistory} className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors">Refresh</button>
+        </div>
+        {history.length === 0 ? (
+          <p className="text-xs text-slate-600 py-2">No check-ins yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-slate-500 text-left">
+                  <th className="pb-2 font-semibold">Event</th>
+                  <th className="pb-2 font-semibold">Session</th>
+                  <th className="pb-2 font-semibold">Seat</th>
+                  <th className="pb-2 font-semibold">Type</th>
+                  <th className="pb-2 font-semibold">Checked In</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {history.map(item => (
+                  <tr key={item.ticketId} className="text-slate-300">
+                    <td className="py-2 pr-3 font-medium text-slate-200 max-w-[140px] truncate">{item.eventName}</td>
+                    <td className="py-2 pr-3 text-slate-400">{item.sessionName}</td>
+                    <td className="py-2 pr-3 font-mono">{item.seatLabel}</td>
+                    <td className="py-2 pr-3 text-slate-400">{item.legendName}</td>
+                    <td className="py-2 whitespace-nowrap text-slate-500">{new Date(item.checkedInAt).toLocaleString('en-US')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
