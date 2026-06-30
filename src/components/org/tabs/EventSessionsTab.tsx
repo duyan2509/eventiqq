@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { message, Popconfirm } from 'antd'
+import { useNavigate } from 'react-router-dom'
 import type { SessionResponse, ChartResponse, CreateSessionDto } from '../../../types/index'
 import { getSessions, createSession, deleteSession } from '../../../api/sessionApi'
 import { getCharts } from '../../../api/chartApi'
+import { getSessionMeta } from '../../../api/seatApi'
 import { formatDate } from '../../../utils/format'
 
 interface Props {
@@ -14,8 +16,10 @@ interface Props {
 
 export function EventSessionsTab({ eventId, orgId, canEdit, eventStatus }: Props) {
   const canModify = canEdit && (!eventStatus || eventStatus === 'Draft')
+  const navigate = useNavigate()
   const [sessions, setSessions] = useState<SessionResponse[]>([])
   const [charts, setCharts] = useState<ChartResponse[]>([])
+  const [designLoading, setDesignLoading] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<CreateSessionDto>({ name: '', startTime: '', endTime: '', chartId: '' })
 
@@ -36,6 +40,18 @@ export function EventSessionsTab({ eventId, orgId, canEdit, eventStatus }: Props
 
   const handleDelete = async (id: string) => {
     try { await deleteSession(eventId, id, orgId); message.success('Session deleted'); fetchAll() } catch { }
+  }
+
+  const handleDesign = async (sessionId: string) => {
+    setDesignLoading(sessionId)
+    try {
+      const meta = await getSessionMeta(sessionId)
+      navigate(`/events/${eventId}/seat-design/${meta.id}`)
+    } catch {
+      message.error('Seat map not ready for this session yet.')
+    } finally {
+      setDesignLoading(null)
+    }
   }
 
   return (
@@ -71,11 +87,20 @@ export function EventSessionsTab({ eventId, orgId, canEdit, eventStatus }: Props
               <p className="text-xs text-slate-500 mt-0.5">📅 {formatDate(s.startTime)} → {formatDate(s.endTime)}</p>
               {s.chartName && <p className="text-xs text-indigo-400 mt-0.5">🗺 {s.chartName}</p>}
             </div>
-            {canModify && (
-              <Popconfirm title="Delete session?" onConfirm={() => handleDelete(s.id)}>
-                <button className="text-xs text-red-400 hover:text-red-300">Delete</button>
-              </Popconfirm>
-            )}
+            <div className="flex items-center gap-2">
+              <button
+                className="text-xs text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+                disabled={designLoading === s.id}
+                onClick={() => handleDesign(s.id)}
+              >
+                {designLoading === s.id ? '...' : 'Design'}
+              </button>
+              {canModify && (
+                <Popconfirm title="Delete session?" onConfirm={() => handleDelete(s.id)}>
+                  <button className="text-xs text-red-400 hover:text-red-300">Delete</button>
+                </Popconfirm>
+              )}
+            </div>
           </div>
         ))}</div>
       )}
