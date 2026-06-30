@@ -93,33 +93,20 @@ export function OrgCheckInsTab() {
       <div className="glass rounded-2xl p-5 space-y-4">
         <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Scan Ticket</label>
 
-        {/* QR upload + token input row */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500">Upload QR image</p>
-            <div className="flex items-center gap-3">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
-                className="block flex-1 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-500/15 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-indigo-300 hover:file:bg-indigo-500/25"
-              />
-              {preview && <img src={preview} alt="preview" className="h-12 w-12 rounded-lg object-cover bg-white p-0.5" />}
-            </div>
-            {scanStatus === 'decoding' && <p className="text-xs text-slate-500">Decoding…</p>}
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500">Or paste token</p>
-            <textarea
-              value={token}
-              onChange={e => setToken(e.target.value)}
-              placeholder="Paste signed token…"
-              rows={2}
-              className="w-full rounded-lg bg-slate-900/60 border border-slate-700 px-3 py-2 text-xs font-mono text-slate-200 outline-none focus:border-indigo-500"
+        {/* QR upload */}
+        <div className="space-y-2">
+          <p className="text-xs text-slate-500">Upload QR image</p>
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+              className="block flex-1 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-500/15 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-indigo-300 hover:file:bg-indigo-500/25"
             />
+            {preview && <img src={preview} alt="preview" className="h-12 w-12 rounded-lg object-cover bg-white p-0.5" />}
           </div>
+          {scanStatus === 'decoding' && <p className="text-xs text-slate-500">Decoding…</p>}
         </div>
 
         <button
